@@ -4,20 +4,38 @@
 #include <chrono>
 #include <cstdint>
 #include <string_view>
-#include <variant>
+#include <unordered_map>
 #include <vector>
 
 #include "ir/ir.hpp"
 
 namespace ether::vm {
 
-using Value = std::variant<int, std::string_view>;
+enum class ValueType : uint8_t { Int, String };
+
+struct Value {
+    ValueType type;
+    union {
+        int32_t i32;
+        const char* str;  // string_view representation
+    } as;
+    uint32_t str_len;     // for string_view support
+
+    Value() : type(ValueType::Int) { as.i32 = 0; }
+    Value(int32_t v) : type(ValueType::Int) { as.i32 = v; }
+    Value(std::string_view v) : type(ValueType::String) {
+        as.str = v.data();
+        str_len = static_cast<uint32_t>(v.size());
+    }
+
+    std::string_view as_string() const { return std::string_view(as.str, str_len); }
+};
 
 inline std::ostream& operator<<(std::ostream& os, const Value& val) {
-    if (std::holds_alternative<int>(val)) {
-        os << std::get<int>(val);
+    if (val.type == ValueType::Int) {
+        os << val.as.i32;
     } else {
-        os << std::get<std::string_view>(val);
+        os << val.as_string();
     }
     return os;
 }
@@ -29,7 +47,7 @@ struct OpCodeStats {
 
 struct CallFrame {
     size_t return_addr;
-    std::unordered_map<std::string_view, Value> locals;
+    size_t stack_base;  // offset in m_stack where locals start
 };
 
 class VM {
@@ -40,14 +58,18 @@ class VM {
     const std::unordered_map<ir::OpCode, OpCodeStats>& get_stats() const { return m_stats; }
 
    private:
-    const ir::IRProgram& m_program;
+    const ir::IRProgram& program_;
     std::vector<Value> m_stack;
     std::vector<CallFrame> m_call_stack;
     size_t m_ip = 0;
     std::unordered_map<ir::OpCode, OpCodeStats> m_stats;
 
-    void push(Value val);
-    Value pop();
+    inline void push(Value val) { m_stack.push_back(val); }
+    inline Value pop() {
+        Value val = m_stack.back();
+        m_stack.pop_back();
+        return val;
+    }
 };
 
 }  // namespace ether::vm

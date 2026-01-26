@@ -2,237 +2,214 @@
 
 #include <unistd.h>
 
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <string>
-// #define DEBUG
+
 #include "common/debug.hpp"
 #include "common/defer.hpp"
 
 namespace ether::vm {
 
-VM::VM(const ir::IRProgram &program) : m_program(program) {
-    m_call_stack.reserve(100);
-    m_stack.reserve(1024);
-}
-
-void VM::push(Value val) { m_stack.push_back(val); }
-
-Value VM::pop() {
-    if (m_stack.empty()) {
-        throw std::runtime_error("Stack underflow");
-    }
-    Value val = m_stack.back();
-    m_stack.pop_back();
-    return val;
+VM::VM(const ir::IRProgram &program) : program_(program) {
+    m_stack.reserve(1024 * 10);
+    m_call_stack.reserve(1000);
 }
 
 Value VM::run(bool collect_stats) {
-    const auto &program = m_program;
-    std::string main_name = "main";
-    if (!program.entry_points.contains(main_name)) {
-        throw std::runtime_error("No 'main' function found");
-    }
-    m_ip = program.entry_points.at(main_name);
-    m_call_stack.push_back({0, {}});  // Base frame (return to HALT)
-    int64_t count = 0;
-    defer(debug_msg("Instructions executed: " << count););
+    const auto &program = program_;
+    const uint8_t *code = program.bytecode.data();
+    m_ip = program.main_addr;
 
-    while (m_ip < program.instructions.size()) {
-        const auto &ins = program.instructions[m_ip++];
-        count++;
+    // Initial frame for main
+    m_call_stack.push_back({0, 0});
+
+    // Pre-allocate slots for main if any (IR generator should tell us how many)
+    auto main_it = program.functions.find("main");
+    if (main_it != program.functions.end()) {
+        m_stack.resize(main_it->second.num_slots);
+    }
+
+#define READ_BYTE()   code[m_ip++]
+#define READ_INT()    (*(int32_t *)&code[(m_ip += 4) - 4])
+#define READ_UINT32() (*(uint32_t *)&code[(m_ip += 4) - 4])
+
+    while (m_ip < program.bytecode.size()) {
+        uint8_t op_byte = READ_BYTE();
+        ir::OpCode op = static_cast<ir::OpCode>(op_byte);
+
         decltype(std::chrono::high_resolution_clock::now()) start;
         if (collect_stats) {
             start = std::chrono::high_resolution_clock::now();
         }
 
-        switch (ins.op) {
+        switch (op) {
             case ir::OpCode::PUSH_INT: {
-                int val = std::get<int>(ins.operand);
-                debug_msg("PUSH_INT: " << val);
-                push(val);
+                int32_t val = READ_INT();
+                push(Value(val));
                 break;
             }
 
             case ir::OpCode::PUSH_STR: {
-                std::string_view val = std::get<std::string>(ins.operand);
-                debug_msg("PUSH_STR: " << val);
-                push(val);
+                uint32_t string_id = READ_UINT32();
+                push(Value(std::string_view(program.string_pool[string_id])));
                 break;
             }
 
             case ir::OpCode::STORE_VAR: {
-                std::string_view name = std::get<std::string>(ins.operand);
-                auto var = pop();
-                debug_msg("STORE_VAR: " << name << " = " << var);
-                m_call_stack.back().locals[name] = var;
+                uint8_t slot = READ_BYTE();
+                m_stack[m_call_stack.back().stack_base + slot] = pop();
                 break;
             }
 
             case ir::OpCode::LOAD_VAR: {
-                std::string_view name = std::get<std::string>(ins.operand);
-                auto var = m_call_stack.back().locals.at(name);
-                debug_msg("LOAD_VAR: " << name << " = " << var);
-                push(var);
+                uint8_t slot = READ_BYTE();
+                push(m_stack[m_call_stack.back().stack_base + slot]);
                 break;
             }
 
             case ir::OpCode::ADD: {
-                int b = std::get<int>(pop());
-                int a = std::get<int>(pop());
-                debug_msg("ADD: " << a << " + " << b << " = " << a + b);
-                push(a + b);
+                int32_t b = pop().as.i32;
+                int32_t a = pop().as.i32;
+                push(Value(a + b));
                 break;
             }
 
             case ir::OpCode::SUB: {
-                int b = std::get<int>(pop());
-                int a = std::get<int>(pop());
-                debug_msg("SUB: " << a << " - " << b << " = " << a - b);
-                push(a - b);
+                int32_t b = pop().as.i32;
+                int32_t a = pop().as.i32;
+                push(Value(a - b));
                 break;
             }
 
             case ir::OpCode::MUL: {
-                int b = std::get<int>(pop());
-                int a = std::get<int>(pop());
-                debug_msg("MUL: " << a << " * " << b << " = " << a * b);
-                push(a * b);
+                int32_t b = pop().as.i32;
+                int32_t a = pop().as.i32;
+                push(Value(a * b));
                 break;
             }
 
             case ir::OpCode::DIV: {
-                int b = std::get<int>(pop());
-                int a = std::get<int>(pop());
-                debug_msg("DIV: " << a << " / " << b << " = " << a / b);
-                push(a / b);
+                int32_t b = pop().as.i32;
+                int32_t a = pop().as.i32;
+                push(Value(a / b));
                 break;
             }
 
             case ir::OpCode::SYS_WRITE: {
                 Value val = pop();
-                int fd = std::get<int>(pop());
+                int32_t fd = pop().as.i32;
                 std::string s;
-                if (std::holds_alternative<int>(val)) {
-                    s = std::to_string(std::get<int>(val));
+                if (val.type == ValueType::Int) {
+                    s = std::to_string(val.as.i32);
                 } else {
-                    s = std::get<std::string_view>(val);
+                    s = val.as_string();
                 }
-                debug_msg("SYS_WRITE: " << fd << " " << s);
                 if (fd == 1) {
-                    int written = write(1, s.data(), s.size());
-                    push(written);
+                    write(1, s.data(), s.size());
+                    push(Value((int32_t)s.size()));
                 } else {
-                    push(-1);
+                    push(Value(-1));
                 }
                 break;
             }
 
             case ir::OpCode::CALL: {
-                std::string_view name = std::get<std::string>(ins.operand);
-                debug_msg("CALL: " << name);
-                if (program.entry_points.contains(std::string(name))) {
-                    m_call_stack.push_back({m_ip, {}});
-                    m_ip = program.entry_points.at(std::string(name));
-                } else {
-                    throw std::runtime_error("Unknown function: " + std::string(name));
+                uint32_t target_addr = READ_UINT32();
+                const auto &info = program.addr_to_info.at(target_addr);
+                uint8_t num_params = info.num_params;
+                uint8_t num_slots = info.num_slots;
+
+                // Params are already on stack. Base starts at first param.
+                size_t base = m_stack.size() - num_params;
+                m_call_stack.push_back({m_ip, base});
+                // Add remaining slots
+                if (num_slots > num_params) {
+                    m_stack.resize(base + num_slots);
                 }
+                m_ip = target_addr;
                 break;
             }
 
             case ir::OpCode::RET: {
-                Value val = pop();
-                debug_msg("RET: " << val);
+                Value res = pop();
                 size_t ret_addr = m_call_stack.back().return_addr;
+                size_t stack_base = m_call_stack.back().stack_base;
                 m_call_stack.pop_back();
-                if (m_call_stack.empty()) {
-                    return val;
-                }
+
+                if (m_call_stack.empty()) return res;
+
+                m_stack.resize(stack_base);  // Shrink to where params were
                 m_ip = ret_addr;
-                push(val);
+                push(res);
                 break;
             }
 
-            case ir::OpCode::LABEL:
-                break;
-
             case ir::OpCode::JMP: {
-                std::string_view name = std::get<std::string>(ins.operand);
-                debug_msg("JMP: " << name);
-                m_ip = program.entry_points.at(std::string(name));
+                m_ip = READ_UINT32();
                 break;
             }
 
             case ir::OpCode::JZ: {
-                int val = std::get<int>(pop());
-                std::string_view name = std::get<std::string>(ins.operand);
-                debug_msg("JZ: " << val << " " << name);
-                if (val == 0) {
-                    m_ip = program.entry_points.at(std::string(name));
+                int32_t condition = pop().as.i32;
+                uint32_t target = READ_UINT32();
+                if (condition == 0) {
+                    m_ip = target;
                 }
                 break;
             }
 
             case ir::OpCode::CMP_EQ: {
-                int b = std::get<int>(pop());
-                int a = std::get<int>(pop());
-                debug_msg("CMP_EQ: " << a << " == " << b << " = " << (a == b ? 1 : 0));
-                push(a == b ? 1 : 0);
+                int32_t b = pop().as.i32;
+                int32_t a = pop().as.i32;
+                push(Value(a == b ? 1 : 0));
                 break;
             }
 
             case ir::OpCode::CMP_LE: {
-                int b = std::get<int>(pop());
-                int a = std::get<int>(pop());
-                debug_msg("CMP_LE: " << a << " <= " << b << " = " << (a <= b ? 1 : 0));
-                push(a <= b ? 1 : 0);
+                int32_t b = pop().as.i32;
+                int32_t a = pop().as.i32;
+                push(Value(a <= b ? 1 : 0));
                 break;
             }
 
             case ir::OpCode::CMP_LT: {
-                int b = std::get<int>(pop());
-                int a = std::get<int>(pop());
-                debug_msg("CMP_LT: " << a << " < " << b << " = " << (a < b ? 1 : 0));
-                push(a < b ? 1 : 0);
+                int32_t b = pop().as.i32;
+                int32_t a = pop().as.i32;
+                push(Value(a < b ? 1 : 0));
                 break;
             }
 
             case ir::OpCode::CMP_GT: {
-                int b = std::get<int>(pop());
-                int a = std::get<int>(pop());
-                debug_msg("CMP_GT: " << a << " > " << b << " = " << (a > b ? 1 : 0));
-                push(a > b ? 1 : 0);
+                int32_t b = pop().as.i32;
+                int32_t a = pop().as.i32;
+                push(Value(a > b ? 1 : 0));
                 break;
             }
 
             case ir::OpCode::CMP_GE: {
-                int b = std::get<int>(pop());
-                int a = std::get<int>(pop());
-                debug_msg("CMP_GE: " << a << " >= " << b << " = " << (a >= b ? 1 : 0));
-                push(a >= b ? 1 : 0);
+                int32_t b = pop().as.i32;
+                int32_t a = pop().as.i32;
+                push(Value(a >= b ? 1 : 0));
                 break;
             }
 
-            case ir::OpCode::HALT: {
-                debug_msg("HALT");
+            case ir::OpCode::HALT:
                 return pop();
-            }
 
-            default: {
-                debug_msg("Unknown opcode: " << ins.op);
-                throw std::runtime_error("Unknown opcode");
-            }
+            default:
+                throw std::runtime_error("Unsupported opcode in new VM");
         }
 
         if (collect_stats) {
             auto end = std::chrono::high_resolution_clock::now();
-            auto &s = m_stats[ins.op];
+            auto &s = m_stats[op];
             s.count++;
             s.total_time += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
         }
     }
-
-    return 0;
+    return Value(0);
 }
 
 }  // namespace ether::vm

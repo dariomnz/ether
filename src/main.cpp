@@ -5,7 +5,6 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <variant>
 #include <vector>
 
 #include "common/error.hpp"
@@ -32,6 +31,98 @@ void report_error(const std::string &filename, const std::string &source, const 
         std::cerr << " ";
     }
     std::cerr << "^" << std::endl;
+}
+
+void printLiteral(const std::string_view &texto) {
+    std::cout << "\"";
+    for (char c : texto) {
+        switch (c) {
+            case '\n':
+                std::cout << "\\n";
+                break;
+            case '\t':
+                std::cout << "\\t";
+                break;
+            case '\r':
+                std::cout << "\\r";
+                break;
+            case '\\':
+                std::cout << "\\\\";
+                break;
+            default:
+                std::cout << c;
+                break;
+        }
+    }
+    std::cout << "\"";
+}
+
+void disassemble(const ether::ir::IRProgram &program) {
+    std::cout << "\nBytecode Disassembly:" << std::endl;
+    const uint8_t *code = program.bytecode.data();
+    size_t ip = 0;
+
+    // Create a mapping from address to function name/info for display
+    std::unordered_map<size_t, std::pair<std::string, ether::ir::IRProgram::FunctionInfo>> addr_to_func;
+    for (const auto &[name, info] : program.functions) {
+        addr_to_func[info.entry_addr] = {name, info};
+    }
+
+    while (ip < program.bytecode.size()) {
+        size_t addr = ip;
+
+        // Check if this address is a function entry point
+        if (addr_to_func.contains(addr)) {
+            const auto &[name, info] = addr_to_func.at(addr);
+            std::cout << "\n<function: " << name << "> (params: " << (int)info.num_params
+                      << ", slots: " << (int)info.num_slots << ")" << std::endl;
+        }
+
+        uint8_t op_byte = code[ip++];
+        ether::ir::OpCode op = static_cast<ether::ir::OpCode>(op_byte);
+
+        std::cout << std::right << std::setw(4) << addr << ": " << std::left << std::setw(15) << op;
+
+        switch (op) {
+            case ether::ir::OpCode::PUSH_INT: {
+                int32_t val = *(int32_t *)&code[ip];
+                ip += 4;
+                std::cout << val;
+                break;
+            }
+            case ether::ir::OpCode::PUSH_STR: {
+                uint32_t id = *(uint32_t *)&code[ip];
+                ip += 4;
+                printLiteral(program.string_pool[id]);
+                break;
+            }
+            case ether::ir::OpCode::STORE_VAR:
+            case ether::ir::OpCode::LOAD_VAR: {
+                uint8_t slot = code[ip++];
+                std::cout << "slot " << (int)slot;
+                break;
+            }
+            case ether::ir::OpCode::CALL: {
+                uint32_t target = *(uint32_t *)&code[ip];
+                ip += 4;
+                std::cout << "addr " << target;
+                if (addr_to_func.contains(target)) {
+                    std::cout << " <" << addr_to_func.at(target).first << ">";
+                }
+                break;
+            }
+            case ether::ir::OpCode::JMP:
+            case ether::ir::OpCode::JZ: {
+                uint32_t target = *(uint32_t *)&code[ip];
+                ip += 4;
+                std::cout << "addr " << target;
+                break;
+            }
+            default:
+                break;
+        }
+        std::cout << std::endl;
+    }
 }
 
 void print_stats(const ether::vm::VM &vm, double total_ms, double lex_ms, double parse_ms, double ir_ms, double vm_ms) {
@@ -126,16 +217,15 @@ int main(int argc, char *argv[]) {
         auto t4 = Clock::now();
 
         if (dump_ir) {
-            std::cout << "Generated IR Instructions:" << std::endl;
-            for (const auto &ins : program.instructions) {
-                std::cout << "  OP: " << ins.op << " Arg: ";
-                if (std::holds_alternative<int>(ins.operand)) {
-                    std::cout << std::get<int>(ins.operand);
-                } else {
-                    std::cout << std::get<std::string>(ins.operand);
-                }
-                std::cout << std::endl;
+            std::cout << "Bytecode Size: " << program.bytecode.size() << " bytes" << std::endl;
+            std::cout << "String Pool Size: " << program.string_pool.size() << " entries" << std::endl;
+            std::cout << "Functions:" << std::endl;
+            for (const auto &[name, info] : program.functions) {
+                std::cout << "  " << name << " @ " << info.entry_addr << " (Params: " << (int)info.num_params
+                          << ", Slots: " << (int)info.num_slots << ")" << std::endl;
             }
+            disassemble(program);
+            return 0;
         }
 
         auto t5 = Clock::now();
@@ -144,11 +234,7 @@ int main(int argc, char *argv[]) {
         auto t6 = Clock::now();
         auto end_total = Clock::now();
 
-        if (std::holds_alternative<int>(result)) {
-            std::cout << "VM Execution Result: " << std::get<int>(result) << std::endl;
-        } else {
-            std::cout << "VM Execution Result: " << std::get<std::string_view>(result) << std::endl;
-        }
+        std::cout << "VM Execution Result: " << result << std::endl;
 
         if (show_stats) {
             auto total_ms =
