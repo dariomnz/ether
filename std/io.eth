@@ -1,0 +1,4 @@
+int print(string msg) {
+  write(1, msg);
+  return 0;
+}
