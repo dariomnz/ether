@@ -127,6 +127,8 @@ void LSPServer::handle_message(const std::string& message) {
         on_definition(id, message);
     } else if (method == "textDocument/hover") {
         on_hover(id, message);
+    } else if (method == "textDocument/semanticTokens/full") {
+        on_semantic_tokens(id, message);
     }
 }
 
@@ -143,7 +145,19 @@ void LSPServer::send_notification(const std::string& method, const std::string& 
 }
 
 void LSPServer::on_initialize(const std::string& id, const std::string& params) {
-    send_response(id, "{\"capabilities\":{\"textDocumentSync\":1,\"definitionProvider\":true,\"hoverProvider\":true}}");
+    send_response(id,
+                  "{\"capabilities\":{"
+                  "\"textDocumentSync\":1,"
+                  "\"definitionProvider\":true,"
+                  "\"hoverProvider\":true,"
+                  "\"semanticTokensProvider\":{"
+                  "\"legend\":{"
+                  "\"tokenTypes\":[\"function\", \"variable\", \"parameter\", \"type\"],"
+                  "\"tokenModifiers\":[]"
+                  "},"
+                  "\"full\":true"
+                  "}"
+                  "}}");
 }
 
 void LSPServer::on_did_open(const std::string& params) {
@@ -456,6 +470,160 @@ void LSPServer::on_hover(const std::string& id, const std::string& params) {
     } else {
         send_response(id, "null");
     }
+}
+
+struct SemanticToken {
+    int line;
+    int col;
+    int length;
+    int type;
+
+    bool operator<(const SemanticToken& other) const {
+        if (line != other.line) return line < other.line;
+        return col < other.col;
+    }
+};
+
+struct SemanticTokensVisitor : public ASTVisitor {
+    std::string target_filename;
+    std::vector<SemanticToken> tokens;
+
+    SemanticTokensVisitor(std::string filename) : target_filename(std::move(filename)) {}
+
+    void visit(Program& node) override {
+        for (auto& f : node.functions) f->accept(*this);
+    }
+
+    void visit(Function& node) override {
+        if (node.filename != target_filename) {
+            // Even if it's not our file, we might want to visit its children
+            // if they could somehow be in our file (unlikely in Ether)
+            // but for now, top-level functions from other files should be skipped.
+            return;
+        }
+        // Function name: type 0
+        tokens.push_back({node.name_line, node.name_col, (int)node.name.size(), 0});
+        if (node.body) node.body->accept(*this);
+    }
+
+    void visit(Block& node) override {
+        for (auto& s : node.statements) s->accept(*this);
+    }
+
+    void visit(VariableDeclaration& node) override {
+        // Variable name: type 1
+        tokens.push_back({node.name_line, node.name_col, (int)node.name.size(), 1});
+        if (node.init) node.init->accept(*this);
+    }
+
+    void visit(VariableExpression& node) override {
+        // Variable reference: type 1
+        tokens.push_back({node.line, node.column, (int)node.name.size(), 1});
+    }
+
+    void visit(FunctionCall& node) override {
+        // Function call: type 0
+        tokens.push_back({node.line, node.column, (int)node.name.size(), 0});
+        for (auto& a : node.args) a->accept(*this);
+    }
+
+    void visit(IfStatement& node) override {
+        if (node.condition) node.condition->accept(*this);
+        if (node.then_branch) node.then_branch->accept(*this);
+        if (node.else_branch) node.else_branch->accept(*this);
+    }
+
+    void visit(ForStatement& node) override {
+        if (node.init) node.init->accept(*this);
+        if (node.condition) node.condition->accept(*this);
+        if (node.increment) node.increment->accept(*this);
+        if (node.body) node.body->accept(*this);
+    }
+
+    void visit(ReturnStatement& node) override {
+        if (node.expr) node.expr->accept(*this);
+    }
+
+    void visit(ExpressionStatement& node) override {
+        if (node.expr) node.expr->accept(*this);
+    }
+
+    void visit(BinaryExpression& node) override {
+        if (node.left) node.left->accept(*this);
+        if (node.right) node.right->accept(*this);
+    }
+
+    void visit(AssignmentExpression& node) override {
+        if (node.lvalue) node.lvalue->accept(*this);
+        if (node.value) node.value->accept(*this);
+    }
+
+    void visit(IntegerLiteral& node) override {}
+    void visit(StringLiteral& node) override {}
+    void visit(YieldStatement& node) override {}
+
+    void visit(SpawnExpression& node) override {
+        if (node.call) node.call->accept(*this);
+    }
+
+    void visit(IncrementExpression& node) override {
+        if (node.lvalue) node.lvalue->accept(*this);
+    }
+
+    void visit(DecrementExpression& node) override {
+        if (node.lvalue) node.lvalue->accept(*this);
+    }
+
+    void visit(AwaitExpression& node) override {
+        if (node.expr) node.expr->accept(*this);
+    }
+};
+
+void LSPServer::on_semantic_tokens(const std::string& id, const std::string& params) {
+    std::string uri = get_json_value(params, "uri");
+    if (uri.starts_with("file://")) uri = uri.substr(7);
+
+    if (m_documents.find(uri) == m_documents.end()) {
+        send_response(id, "{\"data\":[]}");
+        return;
+    }
+
+    auto& doc = m_documents[uri];
+    if (!doc.ast) {
+        send_response(id, "{\"data\":[]}");
+        return;
+    }
+
+    SemanticTokensVisitor visitor(uri);
+    doc.ast->accept(visitor);
+    std::sort(visitor.tokens.begin(), visitor.tokens.end());
+
+    std::vector<int> data;
+    int last_line = 1;
+    int last_col = 1;
+
+    for (const auto& token : visitor.tokens) {
+        int delta_line = token.line - last_line;
+        int delta_start = (delta_line == 0) ? (token.col - last_col) : (token.col - 1);
+
+        data.push_back(delta_line);
+        data.push_back(delta_start);
+        data.push_back(token.length);
+        data.push_back(token.type);
+        data.push_back(0);  // modifiers
+
+        last_line = token.line;
+        last_col = token.col;
+    }
+
+    std::stringstream ss;
+    ss << "{\"data\":[";
+    for (size_t i = 0; i < data.size(); ++i) {
+        ss << data[i];
+        if (i < data.size() - 1) ss << ",";
+    }
+    ss << "]}";
+    send_response(id, ss.str());
 }
 
 void LSPServer::publish_diagnostics(const std::string& filename, const std::vector<ether::CompilerError>& errors) {
