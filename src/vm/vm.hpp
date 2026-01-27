@@ -51,9 +51,12 @@ struct CallFrame {
 };
 
 struct Coroutine {
+    uint32_t id;
+    int32_t waiting_for_id = -1;  // ID of coroutine we are awaiting
     std::vector<Value> stack;
     std::vector<CallFrame> call_stack;
     size_t ip;
+    Value result;
     bool finished = false;
 };
 
@@ -68,6 +71,8 @@ class VM {
     const ir::IRProgram& program_;
     std::vector<Coroutine> m_coroutines;
     size_t m_current_coro = 0;
+    uint32_t m_next_coro_id = 1;
+    std::unordered_map<uint32_t, Value> m_finished_coros;
     std::unordered_map<ir::OpCode, OpCodeStats> m_stats;
 
     inline void push(Value val) { m_coroutines[m_current_coro].stack.push_back(val); }

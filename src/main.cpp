@@ -12,26 +12,44 @@
 #include "ir/ir_gen.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
+#include "sema/analyzer.hpp"
 #include "test_runner/test_runner.hpp"
 #include "vm/vm.hpp"
 
 using Clock = std::chrono::high_resolution_clock;
 
-void report_error(const std::string &filename, const std::string &source, const ether::CompilerError &e) {
+void report_error(const std::string &main_filename, const std::string &main_source, const ether::CompilerError &e) {
+    std::string filename = e.filename();
+    if (filename.empty()) filename = main_filename;
+
     std::cerr << filename << ":" << e.line() << ":" << e.col() << ": error: " << e.what() << std::endl;
 
-    std::stringstream ss(source);
-    std::string line;
-    for (int i = 1; i <= e.line(); ++i) {
-        if (!std::getline(ss, line)) break;
+    std::string source;
+    if (filename == main_filename) {
+        source = main_source;
+    } else {
+        std::ifstream file(filename);
+        if (file.is_open()) {
+            std::stringstream buffer;
+            buffer << file.rdbuf();
+            source = buffer.str();
+        }
     }
 
-    std::cerr << "  " << line << std::endl;
-    std::cerr << "  ";
-    for (int i = 1; i < e.col(); ++i) {
-        std::cerr << " ";
+    if (!source.empty()) {
+        std::stringstream ss(source);
+        std::string line;
+        for (int i = 1; i <= e.line(); ++i) {
+            if (!std::getline(ss, line)) break;
+        }
+
+        std::cerr << "  " << line << std::endl;
+        std::cerr << "  ";
+        for (int i = 1; i < e.col(); ++i) {
+            std::cerr << " ";
+        }
+        std::cerr << "^" << std::endl;
     }
-    std::cerr << "^" << std::endl;
 }
 
 void printLiteral(const std::string_view &texto) {
@@ -118,7 +136,8 @@ void disassemble(const ether::ir::IRProgram &program) {
                 }
                 break;
             }
-            case ether::ir::OpCode::YIELD: {
+            case ether::ir::OpCode::YIELD:
+            case ether::ir::OpCode::AWAIT: {
                 break;
             }
             case ether::ir::OpCode::JMP:
@@ -135,13 +154,15 @@ void disassemble(const ether::ir::IRProgram &program) {
     }
 }
 
-void print_stats(const ether::vm::VM &vm, double total_ms, double lex_ms, double parse_ms, double ir_ms, double vm_ms) {
+void print_stats(const ether::vm::VM &vm, double total_ms, double lex_ms, double parse_ms, double sema_ms, double ir_ms,
+                 double vm_ms) {
     std::cout << "\nPhase Timings:" << std::endl;
     std::cout << std::left << std::setw(15) << "Phase" << "Time (ms)" << std::endl;
     std::cout << std::string(30, '-') << std::endl;
     std::cout << std::left << std::setw(15) << "Tokenizing" << std::fixed << std::setprecision(3) << lex_ms << " ms"
               << std::endl;
     std::cout << std::left << std::setw(15) << "Parsing" << parse_ms << " ms" << std::endl;
+    std::cout << std::left << std::setw(15) << "Sema" << sema_ms << " ms" << std::endl;
     std::cout << std::left << std::setw(15) << "IR Gen" << ir_ms << " ms" << std::endl;
     std::cout << std::left << std::setw(15) << "VM Run" << vm_ms << " ms" << std::endl;
     std::cout << std::string(30, '-') << std::endl;
@@ -223,17 +244,21 @@ int main(int argc, char *argv[]) {
         auto start_total = Clock::now();
 
         auto t1 = Clock::now();
-        ether::lexer::Lexer lexer(source);
+        ether::lexer::Lexer lexer(source, filename);
         auto tokens = lexer.tokenize();
         auto t2 = Clock::now();
 
-        ether::parser::Parser parser(tokens);
+        ether::parser::Parser parser(tokens, filename);
         auto program_ast = parser.parse_program();
         auto t3 = Clock::now();
 
+        ether::sema::Analyzer analyzer;
+        analyzer.analyze(*program_ast);
+        auto t4 = Clock::now();
+
         ether::ir_gen::IRGenerator ir_gen;
         ether::ir::IRProgram program = ir_gen.generate(*program_ast);
-        auto t4 = Clock::now();
+        auto t5 = Clock::now();
 
         if (dump_ir) {
             std::cout << "Bytecode Size: " << program.bytecode.size() << " bytes" << std::endl;
@@ -247,10 +272,10 @@ int main(int argc, char *argv[]) {
             return 0;
         }
 
-        auto t5 = Clock::now();
+        auto t6 = Clock::now();
         ether::vm::VM vm(program);
         ether::vm::Value result = vm.run(show_stats);
-        auto t6 = Clock::now();
+        auto t7 = Clock::now();
         auto end_total = Clock::now();
 
         std::cout << "VM Execution Result: " << result << std::endl;
@@ -260,10 +285,11 @@ int main(int argc, char *argv[]) {
                 std::chrono::duration_cast<std::chrono::microseconds>(end_total - start_total).count() / 1000.0;
             auto lex_ms = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0;
             auto parse_ms = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() / 1000.0;
-            auto ir_ms = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count() / 1000.0;
-            auto vm_ms = std::chrono::duration_cast<std::chrono::microseconds>(t6 - t5).count() / 1000.0;
+            auto sema_ms = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count() / 1000.0;
+            auto ir_ms = std::chrono::duration_cast<std::chrono::microseconds>(t5 - t4).count() / 1000.0;
+            auto vm_ms = std::chrono::duration_cast<std::chrono::microseconds>(t7 - t6).count() / 1000.0;
 
-            print_stats(vm, total_ms, lex_ms, parse_ms, ir_ms, vm_ms);
+            print_stats(vm, total_ms, lex_ms, parse_ms, sema_ms, ir_ms, vm_ms);
         }
     } catch (const ether::CompilerError &e) {
         report_error(filename, source, e);

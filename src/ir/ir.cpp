@@ -79,6 +79,12 @@ std::ostream &operator<<(std::ostream &os, OpCode op) {
         case OpCode::YIELD:
             os << "YIELD";
             break;
+        case OpCode::AWAIT:
+            os << "AWAIT";
+            break;
+        case OpCode::POP:
+            os << "POP";
+            break;
     }
     return os;
 }

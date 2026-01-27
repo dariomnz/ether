@@ -15,6 +15,7 @@ namespace ether::vm {
 VM::VM(const ir::IRProgram &program) : program_(program) {
     // Initial coroutine for main
     Coroutine main_coro;
+    main_coro.id = 0;  // Main is always ID 0
     main_coro.ip = program.main_addr;
     main_coro.call_stack.push_back({0, 0});
 
@@ -36,9 +37,21 @@ Value VM::run(bool collect_stats) {
         m_current_coro %= m_coroutines.size();
 
         if (m_coroutines[m_current_coro].finished) {
+            m_finished_coros[m_coroutines[m_current_coro].id] = m_coroutines[m_current_coro].result;
             m_coroutines.erase(m_coroutines.begin() + m_current_coro);
             if (m_coroutines.empty()) break;
             continue;
+        }
+
+        if (m_coroutines[m_current_coro].waiting_for_id != -1) {
+            uint32_t target_id = (uint32_t)m_coroutines[m_current_coro].waiting_for_id;
+            if (m_finished_coros.contains(target_id)) {
+                m_coroutines[m_current_coro].stack.push_back(m_finished_coros[target_id]);
+                m_coroutines[m_current_coro].waiting_for_id = -1;
+            } else {
+                m_current_coro++;
+                continue;
+            }
         }
 
 #define CUR_CORO()    m_coroutines[m_current_coro]
@@ -161,6 +174,7 @@ Value VM::run(bool collect_stats) {
 
                     if (call_stack.empty()) {
                         if (m_current_coro == 0) main_result = res;
+                        CUR_CORO().result = res;
                         CUR_CORO().finished = true;
                         yielded = true;
                     } else {
@@ -274,6 +288,8 @@ Value VM::run(bool collect_stats) {
                     uint8_t num_slots = info.num_slots;
 
                     Coroutine new_coro;
+                    uint32_t new_id = m_next_coro_id++;
+                    new_coro.id = new_id;
                     new_coro.ip = target_addr;
                     new_coro.call_stack.push_back({0, 0});
 
@@ -288,7 +304,7 @@ Value VM::run(bool collect_stats) {
                     }
 
                     m_coroutines.push_back(std::move(new_coro));
-                    CUR_CORO().stack.push_back(Value(0));
+                    push(Value((int32_t)new_id));
                     break;
                 }
 
@@ -297,8 +313,25 @@ Value VM::run(bool collect_stats) {
                     break;
                 }
 
+                case ir::OpCode::AWAIT: {
+                    int32_t target_id = pop().as.i32;
+                    if (m_finished_coros.contains((uint32_t)target_id)) {
+                        push(m_finished_coros[(uint32_t)target_id]);
+                    } else {
+                        CUR_CORO().waiting_for_id = target_id;
+                        yielded = true;
+                    }
+                    break;
+                }
+
+                case ir::OpCode::POP: {
+                    pop();
+                    break;
+                }
+
                 case ir::OpCode::HALT:
                     if (m_current_coro == 0) main_result = CUR_CORO().stack.back();
+                    CUR_CORO().result = CUR_CORO().stack.back();
                     CUR_CORO().finished = true;
                     yielded = true;
                     break;

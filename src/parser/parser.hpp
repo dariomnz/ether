@@ -12,11 +12,12 @@ namespace ether::parser {
 
 class Parser {
    public:
-    explicit Parser(const std::vector<lexer::Token> &tokens);
+    explicit Parser(const std::vector<lexer::Token> &tokens, std::string filename);
     std::unique_ptr<Program> parse_program();
 
    private:
     const std::vector<lexer::Token> &m_tokens;
+    std::string m_filename;
     size_t m_pos = 0;
 
     const lexer::Token &peek() const;
@@ -24,6 +25,7 @@ class Parser {
     bool match(lexer::TokenType type);
     bool check(lexer::TokenType type) const;
 
+    DataType parse_type();
     std::unique_ptr<Function> parse_function();
     std::unique_ptr<Block> parse_block();
     std::unique_ptr<Statement> parse_statement();

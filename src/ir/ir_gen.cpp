@@ -36,7 +36,7 @@ void IRGenerator::visit_function(const parser::Function &func) {
 
     // Define parameters in scope
     for (const auto &param : func.params) {
-        define_var(param);
+        define_var(param.name);
     }
 
     visit_block(*func.body);
@@ -94,8 +94,7 @@ void IRGenerator::visit_statement(const parser::Statement &stmt) {
         emit_byte(get_var_slot(decl->name));
     } else if (auto expr_stmt = dynamic_cast<const parser::ExpressionStatement *>(&stmt)) {
         visit_expression(*expr_stmt->expr);
-        // Optimization: pop result of expression if not used?
-        // For now, let's keep it simple.
+        emit_opcode(ir::OpCode::POP);
     } else if (auto if_stmt = dynamic_cast<const parser::IfStatement *>(&stmt)) {
         visit_expression(*if_stmt->condition);
         auto jump_to_else = emit_jump(ir::OpCode::JZ);
@@ -133,13 +132,6 @@ void IRGenerator::visit_statement(const parser::Statement &stmt) {
         }
     } else if (auto yield_stmt = dynamic_cast<const parser::YieldStatement *>(&stmt)) {
         emit_opcode(ir::OpCode::YIELD);
-    } else if (auto spawn_stmt = dynamic_cast<const parser::SpawnStatement *>(&stmt)) {
-        // Push arguments
-        for (const auto &arg : spawn_stmt->call->args) {
-            visit_expression(*arg);
-        }
-        emit_opcode(ir::OpCode::SPAWN);
-        emit_uint32((uint32_t)m_program.functions.at(spawn_stmt->call->name).entry_addr);
     }
 }
 
@@ -165,8 +157,9 @@ void IRGenerator::visit_expression(const parser::Expression &expr) {
         emit_opcode(ir::OpCode::ADD);
         emit_opcode(ir::OpCode::STORE_VAR);
         emit_byte(get_var_slot(inc->name));
-        // Push the new value? Usually i++ returns the old one, but for simplicity let's return the new one or nothing.
-        // In the test it's used as a statement, so it doesn't matter much.
+        // Push result for expression consistency
+        emit_opcode(ir::OpCode::LOAD_VAR);
+        emit_byte(get_var_slot(inc->name));
     } else if (auto dec = dynamic_cast<const parser::DecrementExpression *>(&expr)) {
         emit_opcode(ir::OpCode::LOAD_VAR);
         emit_byte(get_var_slot(dec->name));
@@ -175,6 +168,19 @@ void IRGenerator::visit_expression(const parser::Expression &expr) {
         emit_opcode(ir::OpCode::SUB);
         emit_opcode(ir::OpCode::STORE_VAR);
         emit_byte(get_var_slot(dec->name));
+        // Push result for expression consistency
+        emit_opcode(ir::OpCode::LOAD_VAR);
+        emit_byte(get_var_slot(dec->name));
+    } else if (auto await_expr = dynamic_cast<const parser::AwaitExpression *>(&expr)) {
+        visit_expression(*await_expr->expr);
+        emit_opcode(ir::OpCode::AWAIT);
+    } else if (auto spawn_expr = dynamic_cast<const parser::SpawnExpression *>(&expr)) {
+        // Push arguments
+        for (const auto &arg : spawn_expr->call->args) {
+            visit_expression(*arg);
+        }
+        emit_opcode(ir::OpCode::SPAWN);
+        emit_uint32((uint32_t)m_program.functions.at(spawn_expr->call->name).entry_addr);
     } else if (auto bin = dynamic_cast<const parser::BinaryExpression *>(&expr)) {
         visit_expression(*bin->left);
         visit_expression(*bin->right);

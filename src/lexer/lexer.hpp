@@ -10,11 +10,12 @@ namespace ether::lexer {
 
 class Lexer {
    public:
-    explicit Lexer(std::string_view source);
+    explicit Lexer(std::string_view source, std::string filename);
     std::vector<Token> tokenize();
 
    private:
     std::string_view m_source;
+    std::string m_filename;
     size_t m_pos = 0;
     int m_line = 1;
     int m_col = 1;

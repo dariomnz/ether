@@ -14,9 +14,11 @@ enum class TokenType {
     Else,
     While,
     For,
+    Coroutine,
     HashInclude,
     Spawn,
     Yield,
+    Await,
 
     // Identifiers and Literals
     Identifier,

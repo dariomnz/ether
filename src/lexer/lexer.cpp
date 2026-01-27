@@ -1,20 +1,23 @@
+#define ETHER_LEXER_CPP
 #include "lexer.hpp"
 
 #include <cctype>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
 #include "common/error.hpp"
+
 
 namespace ether::lexer {
 
 static const std::unordered_map<std::string_view, TokenType> keywords = {
-    {"int", TokenType::Int},    {"return", TokenType::Return}, {"if", TokenType::If},
-    {"else", TokenType::Else},  {"while", TokenType::While},   {"for", TokenType::For},
-    {"string", TokenType::Int}, {"spawn", TokenType::Spawn},   {"yield", TokenType::Yield}};
+    {"int", TokenType::Int},     {"return", TokenType::Return},      {"if", TokenType::If},
+    {"else", TokenType::Else},   {"while", TokenType::While},        {"for", TokenType::For},
+    {"string", TokenType::Int},  {"spawn", TokenType::Spawn},        {"yield", TokenType::Yield},
+    {"await", TokenType::Await}, {"coroutine", TokenType::Coroutine}};
 
-Lexer::Lexer(std::string_view source) : m_source(source) {}
+Lexer::Lexer(std::string_view source, std::string filename) : m_source(source), m_filename(std::move(filename)) {}
 
 char Lexer::peek() const {
     if (m_pos >= m_source.size()) return '\0';
@@ -127,7 +130,7 @@ Token Lexer::next_token() {
             advance();  // skip closing "
             return {TokenType::StringLiteral, value, start_line, start_col};
         } else {
-            throw CompilerError("Unterminated string literal", start_line, start_col);
+            throw CompilerError("Unterminated string literal", m_filename, start_line, start_col);
         }
     }
 
