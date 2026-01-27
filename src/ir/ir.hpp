@@ -33,7 +33,9 @@ enum class OpCode : uint8_t {
     CMP_LE,      // [uint8_t opcode] (1 byte)
     CMP_LT,      // [uint8_t opcode] (1 byte)
     CMP_GT,      // [uint8_t opcode] (1 byte)
-    CMP_GE       // [uint8_t opcode] (1 byte)
+    CMP_GE,      // [uint8_t opcode] (1 byte)
+    SPAWN,       // [uint8_t opcode] [uint32_t target_addr] (5 bytes)
+    YIELD        // [uint8_t opcode] (1 byte)
 };
 
 struct IRProgram {

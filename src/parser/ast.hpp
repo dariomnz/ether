@@ -67,6 +67,15 @@ struct ExpressionStatement : Statement {
     explicit ExpressionStatement(std::unique_ptr<Expression> e) : expr(std::move(e)) {}
 };
 
+struct YieldStatement : Statement {
+    YieldStatement() = default;
+};
+
+struct SpawnStatement : Statement {
+    std::unique_ptr<FunctionCall> call;
+    explicit SpawnStatement(std::unique_ptr<FunctionCall> c) : call(std::move(c)) {}
+};
+
 struct AssignmentExpression : Expression {
     std::string name;
     std::unique_ptr<Expression> value;
@@ -76,6 +85,11 @@ struct AssignmentExpression : Expression {
 struct IncrementExpression : Expression {
     std::string name;
     explicit IncrementExpression(std::string n) : name(std::move(n)) {}
+};
+
+struct DecrementExpression : Expression {
+    std::string name;
+    explicit DecrementExpression(std::string n) : name(std::move(n)) {}
 };
 
 struct ForStatement : Statement {

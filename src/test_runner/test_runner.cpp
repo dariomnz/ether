@@ -1,9 +1,20 @@
+#include "test_runner.hpp"
+
+#include <sys/wait.h>
+
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <optional>
+#include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
+
+namespace ether {
 
 struct TestCase {
     fs::path path;
@@ -11,25 +22,43 @@ struct TestCase {
     std::vector<std::string> expected_outputs;
 };
 
-std::string exec(const std::string& cmd) {
+struct ExecResult {
+    std::string output;
+    int status;
+};
+
+ExecResult exec(const std::string& cmd) {
     std::array<char, 128> buffer;
     std::string result;
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+    FILE* pipe = popen(cmd.c_str(), "r");
     if (!pipe) {
         throw std::runtime_error("popen() failed!");
     }
-    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
         result += buffer.data();
     }
-    return result;
+    int status = pclose(pipe);
+    return {result, status};
 }
 
 bool run_test(const std::string& ether_bin, const TestCase& tc) {
     std::cout << "Running test: " << tc.path.relative_path() << "... " << std::flush;
     auto start = std::chrono::high_resolution_clock::now();
     try {
-        std::string cmd = ether_bin + " " + tc.path.string() + " 2>&1";
-        std::string output = exec(cmd);
+        // Use 'timeout 1s' to prevent hanging
+        std::string cmd = "timeout 1s " + ether_bin + " " + tc.path.string() + " 2>&1";
+        ExecResult res = exec(cmd);
+        std::string output = res.output;
+
+        // Check for timeout (exit code 124 for 'timeout' command)
+        int exit_code = WEXITSTATUS(res.status);
+        if (exit_code == 124) {
+            auto end = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed = end - start;
+            std::cout << "\033[33mTIMEOUT\033[0m in " << std::fixed << std::setprecision(3) << elapsed.count()
+                      << " seconds" << std::endl;
+            return false;
+        }
 
         std::vector<std::string> errors;
 
@@ -78,14 +107,10 @@ bool run_test(const std::string& ether_bin, const TestCase& tc) {
     }
 }
 
-int main(int argc, char* argv[]) {
-    if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <ether_bin> <test_dir_or_file>" << std::endl;
-        return 1;
-    }
+int run_tests(const std::string& ether_bin, const std::string& test_path) {
     auto start = std::chrono::high_resolution_clock::now();
-    std::string ether_bin = fs::absolute(argv[1]).string();
-    fs::path target = argv[2];
+    std::string ether_bin_abs = fs::absolute(ether_bin).string();
+    fs::path target = test_path;
 
     std::vector<TestCase> tests;
     auto process_file = [&](const fs::path& p) {
@@ -128,7 +153,7 @@ int main(int argc, char* argv[]) {
 
     int passed = 0;
     for (const auto& tc : tests) {
-        if (run_test(ether_bin, tc)) {
+        if (run_test(ether_bin_abs, tc)) {
             passed++;
         }
     }
@@ -136,5 +161,7 @@ int main(int argc, char* argv[]) {
     std::chrono::duration<double> elapsed = end - start;
     std::cout << "\nSummary: " << passed << "/" << tests.size() << " tests passed in " << std::fixed
               << std::setprecision(3) << elapsed.count() << " seconds" << std::endl;
-    return (passed == tests.size()) ? 0 : 1;
+    return (passed == (int)tests.size()) ? 0 : 1;
 }
+
+}  // namespace ether

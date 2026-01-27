@@ -198,6 +198,28 @@ std::unique_ptr<Statement> Parser::parse_statement() {
         return std::make_unique<VariableDeclaration>(std::move(name), std::move(init));
     }
 
+    if (match(lexer::TokenType::Yield)) {
+        if (!match(lexer::TokenType::Semicolon)) {
+            const auto &token = peek();
+            throw CompilerError("Expected ';' after yield", token.line, token.column);
+        }
+        return std::make_unique<YieldStatement>();
+    }
+
+    if (match(lexer::TokenType::Spawn)) {
+        auto expr = parse_expression();
+        auto call = std::unique_ptr<FunctionCall>(dynamic_cast<FunctionCall *>(expr.release()));
+        if (!call) {
+            const auto &token = peek();
+            throw CompilerError("Expected function call after spawn", token.line, token.column);
+        }
+        if (!match(lexer::TokenType::Semicolon)) {
+            const auto &token = peek();
+            throw CompilerError("Expected ';' after spawn statement", token.line, token.column);
+        }
+        return std::make_unique<SpawnStatement>(std::move(call));
+    }
+
     // Expression statement as fallback
     auto expr = parse_expression();
     if (!match(lexer::TokenType::Semicolon)) {
@@ -220,6 +242,11 @@ std::unique_ptr<Expression> Parser::parse_expression() {
                 std::string name(advance().lexeme);
                 advance();  // skip '++'
                 return std::make_unique<IncrementExpression>(std::move(name));
+            }
+            if (m_tokens[m_pos + 1].type == lexer::TokenType::MinusMinus) {
+                std::string name(advance().lexeme);
+                advance();  // skip '--'
+                return std::make_unique<DecrementExpression>(std::move(name));
             }
         }
     }
@@ -251,7 +278,8 @@ std::unique_ptr<Expression> Parser::parse_comparison() {
                 op = BinaryExpression::Op::Eq;
                 break;
             default:
-                throw std::runtime_error("Unknown comparison operator");
+                const auto &token = peek();
+                throw CompilerError("Unknown comparison operator", token.line, token.column);
         }
         left = std::make_unique<BinaryExpression>(op, std::move(left), std::move(right));
     }
@@ -305,7 +333,7 @@ std::unique_ptr<Expression> Parser::parse_primary() {
                 } while (match(lexer::TokenType::Comma));
             }
             if (!match(lexer::TokenType::RParent)) {
-                throw std::runtime_error("Expected ')' after arguments");
+                throw CompilerError("Expected ')' after arguments", peek().line, peek().column);
             }
             return std::make_unique<FunctionCall>(std::move(name), std::move(args));
         }
@@ -314,11 +342,11 @@ std::unique_ptr<Expression> Parser::parse_primary() {
     if (match(lexer::TokenType::LParent)) {
         auto expr = parse_expression();
         if (!match(lexer::TokenType::RParent)) {
-            throw std::runtime_error("Expected ')' after expression");
+            throw CompilerError("Expected ')' after expression", peek().line, peek().column);
         }
         return expr;
     }
-    throw std::runtime_error("Expected expression at line " + std::to_string(peek().line));
+    throw CompilerError("Expected expression", peek().line, peek().column);
 }
 
 }  // namespace ether::parser

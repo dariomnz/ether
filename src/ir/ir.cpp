@@ -73,6 +73,12 @@ std::ostream &operator<<(std::ostream &os, OpCode op) {
         case OpCode::CMP_GE:
             os << "CMP_GE";
             break;
+        case OpCode::SPAWN:
+            os << "SPAWN";
+            break;
+        case OpCode::YIELD:
+            os << "YIELD";
+            break;
     }
     return os;
 }

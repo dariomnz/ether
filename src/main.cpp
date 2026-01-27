@@ -12,6 +12,7 @@
 #include "ir/ir_gen.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
+#include "test_runner/test_runner.hpp"
 #include "vm/vm.hpp"
 
 using Clock = std::chrono::high_resolution_clock;
@@ -107,13 +108,17 @@ void disassemble(const ether::ir::IRProgram &program) {
                 std::cout << "args " << (int)num_args;
                 break;
             }
-            case ether::ir::OpCode::CALL: {
+            case ether::ir::OpCode::CALL:
+            case ether::ir::OpCode::SPAWN: {
                 uint32_t target = *(uint32_t *)&code[ip];
                 ip += 4;
                 std::cout << "addr " << target;
                 if (addr_to_func.contains(target)) {
                     std::cout << " <" << addr_to_func.at(target).first << ">";
                 }
+                break;
+            }
+            case ether::ir::OpCode::YIELD: {
                 break;
             }
             case ether::ir::OpCode::JMP:
@@ -178,11 +183,20 @@ void print_stats(const ether::vm::VM &vm, double total_ms, double lex_ms, double
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        std::cerr << "Usage: ether <filename> [--dump-ir] [--stats]" << std::endl;
+        std::cerr << "Usage: ether <filename|--test> [path] [--dump-ir] [--stats]" << std::endl;
         return 1;
     }
 
-    std::string filename = argv[1];
+    std::string first_arg = argv[1];
+    if (first_arg == "--test") {
+        if (argc < 3) {
+            std::cerr << "Error: --test requires a directory or file path" << std::endl;
+            return 1;
+        }
+        return ether::run_tests(argv[0], argv[2]);
+    }
+
+    std::string filename = first_arg;
     bool dump_ir = false;
     bool show_stats = false;
 

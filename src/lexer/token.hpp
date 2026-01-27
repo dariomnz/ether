@@ -15,6 +15,8 @@ enum class TokenType {
     While,
     For,
     HashInclude,
+    Spawn,
+    Yield,
 
     // Identifiers and Literals
     Identifier,
@@ -25,6 +27,7 @@ enum class TokenType {
     Plus,
     PlusPlus,
     Minus,
+    MinusMinus,
     Star,
     Slash,
     Equal,

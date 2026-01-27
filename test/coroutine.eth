@@ -1,0 +1,16 @@
+int worker(int id, int count) {
+    for (int i = 0; i < count; i++) {
+        printf("Worker %d: loop %d\n", id, i);
+        yield;
+    }
+}
+
+int main() {
+    printf("Starting coroutines...\n");
+    int count = 5;
+    for (int i = count; i >= 1; i--) {
+        spawn worker(i, i);
+    }
+    printf("Main finished spawning.\n");
+    return 0;
+}

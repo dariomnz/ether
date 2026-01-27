@@ -50,6 +50,13 @@ struct CallFrame {
     size_t stack_base;  // offset in m_stack where locals start
 };
 
+struct Coroutine {
+    std::vector<Value> stack;
+    std::vector<CallFrame> call_stack;
+    size_t ip;
+    bool finished = false;
+};
+
 class VM {
    public:
     explicit VM(const ir::IRProgram& program);
@@ -59,15 +66,15 @@ class VM {
 
    private:
     const ir::IRProgram& program_;
-    std::vector<Value> m_stack;
-    std::vector<CallFrame> m_call_stack;
-    size_t m_ip = 0;
+    std::vector<Coroutine> m_coroutines;
+    size_t m_current_coro = 0;
     std::unordered_map<ir::OpCode, OpCodeStats> m_stats;
 
-    inline void push(Value val) { m_stack.push_back(val); }
+    inline void push(Value val) { m_coroutines[m_current_coro].stack.push_back(val); }
     inline Value pop() {
-        Value val = m_stack.back();
-        m_stack.pop_back();
+        auto& coro = m_coroutines[m_current_coro];
+        Value val = coro.stack.back();
+        coro.stack.pop_back();
         return val;
     }
 };

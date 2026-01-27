@@ -41,6 +41,32 @@ void IRGenerator::visit_function(const parser::Function &func) {
 
     visit_block(*func.body);
 
+    // Ensure the function always returns.
+    // We check if the last statement is a return or a block ending in a return.
+    auto ends_with_ret = [](const parser::Block &b) {
+        auto is_ret = [](const parser::Statement *s) -> bool {
+            return dynamic_cast<const parser::ReturnStatement *>(s) != nullptr;
+        };
+
+        if (b.statements.empty()) return false;
+        const parser::Statement *last = b.statements.back().get();
+        if (is_ret(last)) return true;
+
+        // Handle nested blocks at the end
+        while (auto nested = dynamic_cast<const parser::Block *>(last)) {
+            if (nested->statements.empty()) return false;
+            last = nested->statements.back().get();
+            if (is_ret(last)) return true;
+        }
+        return false;
+    };
+
+    if (!ends_with_ret(*func.body)) {
+        emit_opcode(ir::OpCode::PUSH_INT);
+        emit_int(0);
+        emit_opcode(ir::OpCode::RET);
+    }
+
     // Record how many slots this function needs
     m_program.functions[func.name].num_slots = m_scopes.back().next_slot;
     m_scopes.pop_back();
@@ -105,6 +131,15 @@ void IRGenerator::visit_statement(const parser::Statement &stmt) {
         if (for_stmt->condition) {
             patch_jump(jump_to_exit, m_program.bytecode.size());
         }
+    } else if (auto yield_stmt = dynamic_cast<const parser::YieldStatement *>(&stmt)) {
+        emit_opcode(ir::OpCode::YIELD);
+    } else if (auto spawn_stmt = dynamic_cast<const parser::SpawnStatement *>(&stmt)) {
+        // Push arguments
+        for (const auto &arg : spawn_stmt->call->args) {
+            visit_expression(*arg);
+        }
+        emit_opcode(ir::OpCode::SPAWN);
+        emit_uint32((uint32_t)m_program.functions.at(spawn_stmt->call->name).entry_addr);
     }
 }
 
@@ -132,6 +167,14 @@ void IRGenerator::visit_expression(const parser::Expression &expr) {
         emit_byte(get_var_slot(inc->name));
         // Push the new value? Usually i++ returns the old one, but for simplicity let's return the new one or nothing.
         // In the test it's used as a statement, so it doesn't matter much.
+    } else if (auto dec = dynamic_cast<const parser::DecrementExpression *>(&expr)) {
+        emit_opcode(ir::OpCode::LOAD_VAR);
+        emit_byte(get_var_slot(dec->name));
+        emit_opcode(ir::OpCode::PUSH_INT);
+        emit_int(1);
+        emit_opcode(ir::OpCode::SUB);
+        emit_opcode(ir::OpCode::STORE_VAR);
+        emit_byte(get_var_slot(dec->name));
     } else if (auto bin = dynamic_cast<const parser::BinaryExpression *>(&expr)) {
         visit_expression(*bin->left);
         visit_expression(*bin->right);

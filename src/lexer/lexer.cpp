@@ -5,12 +5,14 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "common/error.hpp"
 
 namespace ether::lexer {
 
 static const std::unordered_map<std::string_view, TokenType> keywords = {
-    {"int", TokenType::Int},     {"return", TokenType::Return}, {"if", TokenType::If},     {"else", TokenType::Else},
-    {"while", TokenType::While}, {"for", TokenType::For},       {"string", TokenType::Int}};
+    {"int", TokenType::Int},    {"return", TokenType::Return}, {"if", TokenType::If},
+    {"else", TokenType::Else},  {"while", TokenType::While},   {"for", TokenType::For},
+    {"string", TokenType::Int}, {"spawn", TokenType::Spawn},   {"yield", TokenType::Yield}};
 
 Lexer::Lexer(std::string_view source) : m_source(source) {}
 
@@ -125,7 +127,7 @@ Token Lexer::next_token() {
             advance();  // skip closing "
             return {TokenType::StringLiteral, value, start_line, start_col};
         } else {
-            throw std::runtime_error("Unterminated string literal");
+            throw CompilerError("Unterminated string literal", start_line, start_col);
         }
     }
 
@@ -140,8 +142,13 @@ Token Lexer::next_token() {
             }
             return {TokenType::Plus, lexeme, start_line, start_col};
         }
-        case '-':
+        case '-': {
+            if (peek() == '-') {
+                advance();
+                return {TokenType::MinusMinus, "--", start_line, start_col};
+            }
             return {TokenType::Minus, lexeme, start_line, start_col};
+        }
         case '*':
             return {TokenType::Star, lexeme, start_line, start_col};
         case '/':
