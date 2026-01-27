@@ -65,6 +65,25 @@ static std::string unescape(const std::string& s) {
     return res;
 }
 
+static std::string escape_json(const std::string& s) {
+    std::string res;
+    for (char c : s) {
+        if (c == '"')
+            res += "\\\"";
+        else if (c == '\\')
+            res += "\\\\";
+        else if (c == '\n')
+            res += "\\n";
+        else if (c == '\r')
+            res += "\\r";
+        else if (c == '\t')
+            res += "\\t";
+        else
+            res += c;
+    }
+    return res;
+}
+
 static std::string get_json_value(const std::string& json, const std::string& key) {
     size_t pos = json.find("\"" + key + "\"");
     if (pos == std::string::npos) return "";
@@ -115,6 +134,12 @@ void LSPServer::send_response(const std::string& id, const std::string& result) 
     std::string body = "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":" + result + "}";
     std::cout << "Content-Length: " << body.size() << "\r\n\r\n" << body << std::flush;
     std::cerr << "[LSP] Sent response: " << body << std::endl;
+}
+
+void LSPServer::send_notification(const std::string& method, const std::string& params) {
+    std::string body = "{\"jsonrpc\":\"2.0\",\"method\":\"" + method + "\",\"params\":" + params + "}";
+    std::cout << "Content-Length: " << body.size() << "\r\n\r\n" << body << std::flush;
+    std::cerr << "[LSP] Sent notification: " << body << std::endl;
 }
 
 void LSPServer::on_initialize(const std::string& id, const std::string& params) {
@@ -425,11 +450,31 @@ void LSPServer::on_hover(const std::string& id, const std::string& params) {
 
     if (finder.found && !finder.hover_info.empty()) {
         std::stringstream ss;
-        ss << "{\"contents\":{\"kind\":\"markdown\",\"value\":\"```ether\\n" << finder.hover_info << "\\n```\"}}";
+        ss << "{\"contents\":{\"kind\":\"markdown\",\"value\":\"```ether\\n"
+           << escape_json(finder.hover_info) << "\\n```\"}}";
         send_response(id, ss.str());
     } else {
         send_response(id, "null");
     }
+}
+
+void LSPServer::publish_diagnostics(const std::string& filename, const std::vector<ether::CompilerError>& errors) {
+    std::stringstream ss;
+    ss << "{\"uri\":\"file://" << filename << "\",\"diagnostics\":[";
+    for (size_t i = 0; i < errors.size(); ++i) {
+        const auto& e = errors[i];
+        ss << "{"
+           << "\"range\":{"
+           << "\"start\":{\"line\":" << (e.line() - 1) << ",\"character\":" << (e.col() - 1) << "},"
+           << "\"end\":{\"line\":" << (e.line() - 1) << ",\"character\":" << (e.col()) << "}"
+           << "},"
+           << "\"severity\":1,"
+           << "\"message\":\"" << escape_json(e.what()) << "\""
+           << "}";
+        if (i < errors.size() - 1) ss << ",";
+    }
+    ss << "]}";
+    send_notification("textDocument/publishDiagnostics", ss.str());
 }
 
 void LSPServer::process_file(const std::string& filename, const std::string& source) {
@@ -445,8 +490,11 @@ void LSPServer::process_file(const std::string& filename, const std::string& sou
 
         m_documents[filename] = {source, std::move(program_ast)};
         std::cerr << "[LSP] Analysis complete for " << filename << std::endl;
+        publish_diagnostics(filename, {});
     } catch (const CompilerError& e) {
-        std::cerr << "[LSP] Sema error during analysis: " << e.what() << std::endl;
+        std::cerr << "[LSP] Sema error during analysis: " << e.what() << " at " << e.line() << ":" << e.col()
+                  << std::endl;
+        publish_diagnostics(filename, {e});
     } catch (const std::exception& e) {
         std::cerr << "[LSP] Error during analysis: " << e.what() << std::endl;
     } catch (...) {
