@@ -23,6 +23,7 @@ enum class TokenType {
 
     // Operators
     Plus,
+    PlusPlus,
     Minus,
     Star,
     Slash,

@@ -144,6 +144,34 @@ std::unique_ptr<Statement> Parser::parse_statement() {
         return std::make_unique<IfStatement>(std::move(condition), std::move(then_branch), std::move(else_branch));
     }
 
+    if (match(lexer::TokenType::For)) {
+        if (!match(lexer::TokenType::LParent))
+            throw CompilerError("Expected '(' after 'for'", peek().line, peek().column);
+
+        std::unique_ptr<Statement> init = nullptr;
+        if (!match(lexer::TokenType::Semicolon)) {
+            init = parse_statement();  // This handles int i = 0; or i = 0;
+        }
+
+        std::unique_ptr<Expression> condition = nullptr;
+        if (!match(lexer::TokenType::Semicolon)) {
+            condition = parse_expression();
+            if (!match(lexer::TokenType::Semicolon))
+                throw CompilerError("Expected ';' after for condition", peek().line, peek().column);
+        }
+
+        std::unique_ptr<Expression> increment = nullptr;
+        if (!match(lexer::TokenType::RParent)) {
+            increment = parse_expression();
+            if (!match(lexer::TokenType::RParent))
+                throw CompilerError("Expected ')' after for increment", peek().line, peek().column);
+        }
+
+        auto body = parse_block();
+        return std::make_unique<ForStatement>(std::move(init), std::move(condition), std::move(increment),
+                                              std::move(body));
+    }
+
     if (match(lexer::TokenType::Return)) {
         auto expr = parse_expression();
         if (!match(lexer::TokenType::Semicolon)) {
@@ -179,7 +207,24 @@ std::unique_ptr<Statement> Parser::parse_statement() {
     return std::make_unique<ExpressionStatement>(std::move(expr));
 }
 
-std::unique_ptr<Expression> Parser::parse_expression() { return parse_comparison(); }
+std::unique_ptr<Expression> Parser::parse_expression() {
+    if (check(lexer::TokenType::Identifier)) {
+        // Lookahead to see if it's an assignment or increment
+        if (m_pos + 1 < m_tokens.size()) {
+            if (m_tokens[m_pos + 1].type == lexer::TokenType::Equal) {
+                std::string name(advance().lexeme);
+                advance();  // skip '='
+                return std::make_unique<AssignmentExpression>(std::move(name), parse_expression());
+            }
+            if (m_tokens[m_pos + 1].type == lexer::TokenType::PlusPlus) {
+                std::string name(advance().lexeme);
+                advance();  // skip '++'
+                return std::make_unique<IncrementExpression>(std::move(name));
+            }
+        }
+    }
+    return parse_comparison();
+}
 
 std::unique_ptr<Expression> Parser::parse_comparison() {
     auto left = parse_addition();

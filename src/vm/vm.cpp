@@ -195,6 +195,53 @@ Value VM::run(bool collect_stats) {
                 break;
             }
 
+            case ir::OpCode::SYS_PRINTF: {
+                uint8_t num_args = READ_BYTE();
+                std::vector<Value> args(num_args);
+                for (int i = num_args - 1; i >= 0; --i) {
+                    args[i] = pop();
+                }
+
+                if (args.empty() || args[0].type != ValueType::String) {
+                    throw std::runtime_error("printf requires at least a format string argument");
+                }
+
+                std::string_view fmt = args[0].as_string();
+                size_t arg_idx = 1;
+                for (size_t i = 0; i < fmt.size(); ++i) {
+                    if (fmt[i] == '%' && i + 1 < fmt.size()) {
+                        i++;
+                        if (fmt[i] == 'd') {
+                            if (arg_idx < args.size() && args[arg_idx].type == ValueType::Int) {
+                                std::cout << args[arg_idx++].as.i32;
+                            } else {
+                                std::cout << "%d";
+                            }
+                        } else if (fmt[i] == 's') {
+                            if (arg_idx < args.size() && args[arg_idx].type == ValueType::String) {
+                                std::cout << args[arg_idx++].as_string();
+                            } else {
+                                std::cout << "%s";
+                            }
+                        } else {
+                            std::cout << '%' << fmt[i];
+                        }
+                    } else if (fmt[i] == '\\' && i + 1 < fmt.size()) {
+                        i++;
+                        if (fmt[i] == 'n')
+                            std::cout << '\n';
+                        else if (fmt[i] == 't')
+                            std::cout << '\t';
+                        else
+                            std::cout << '\\' << fmt[i];
+                    } else {
+                        std::cout << fmt[i];
+                    }
+                }
+                push(Value(0));  // printf return 0
+                break;
+            }
+
             case ir::OpCode::HALT:
                 return pop();
 

@@ -102,6 +102,11 @@ void disassemble(const ether::ir::IRProgram &program) {
                 std::cout << "slot " << (int)slot;
                 break;
             }
+            case ether::ir::OpCode::SYS_PRINTF: {
+                uint8_t num_args = code[ip++];
+                std::cout << "args " << (int)num_args;
+                break;
+            }
             case ether::ir::OpCode::CALL: {
                 uint32_t target = *(uint32_t *)&code[ip];
                 ip += 4;

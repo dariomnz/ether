@@ -1,0 +1,23 @@
+#include "std/io.eth"
+
+int main() {
+    // Variable declarations and initialization
+    int number = 5;    // The number we want the table for
+    int range = 1000;  // How far the table goes
+    int result;
+
+    printf("--- Multiplication Table of %d ---\n", number);
+
+    // Loop to calculate and display each row
+    for (int i = 1; i <= range; i++) {
+        result = number * i;
+
+        // Output format: "5 x 1 = 5"
+        printf("%d x %d = %d\n", number, i, result);
+    }
+
+    printf("------------------------------\n");
+    printf("Program finished successfully.\n");
+
+    return 0;
+}

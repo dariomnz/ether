@@ -46,11 +46,11 @@ std::ostream &operator<<(std::ostream &os, OpCode op) {
         case OpCode::SYS_CLOSE:
             os << "SYS_CLOSE";
             break;
+        case OpCode::SYS_PRINTF:
+            os << "SYS_PRINTF";
+            break;
         case OpCode::CALL:
             os << "CALL";
-            break;
-        case OpCode::LABEL:
-            os << "LABEL";
             break;
         case OpCode::JMP:
             os << "JMP";

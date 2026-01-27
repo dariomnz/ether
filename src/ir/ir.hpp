@@ -11,29 +11,29 @@
 namespace ether::ir {
 
 enum class OpCode : uint8_t {
-    PUSH_INT,   // [uint8_t] [int32_t val]
-    LOAD_VAR,   // [uint8_t] [uint8_t slot]
-    STORE_VAR,  // [uint8_t] [uint8_t slot]
-    ADD,        // [uint8_t]
-    SUB,        // [uint8_t]
-    MUL,        // [uint8_t]
-    DIV,        // [uint8_t]
-    RET,        // [uint8_t]
-    HALT,       // [uint8_t]
-    PUSH_STR,   // [uint8_t] [uint32_t string_id]
-    SYS_OPEN,   // ... same as before
-    SYS_READ,
-    SYS_WRITE,
-    SYS_CLOSE,
-    CALL,   // [uint8_t] [uint32_t func_addr] - For simplicity, let's use direct address after linking
-    LABEL,  // Only temporary
-    JMP,    // [uint8_t] [int32_t target_addr]
-    JZ,     // [uint8_t] [int32_t target_addr]
-    CMP_EQ,
-    CMP_LE,
-    CMP_LT,
-    CMP_GT,
-    CMP_GE
+    PUSH_INT,    // [uint8_t opcode] [int32_t value] (5 bytes)
+    LOAD_VAR,    // [uint8_t opcode] [uint8_t slot] (2 bytes)
+    STORE_VAR,   // [uint8_t opcode] [uint8_t slot] (2 bytes)
+    ADD,         // [uint8_t opcode] (1 byte)
+    SUB,         // [uint8_t opcode] (1 byte)
+    MUL,         // [uint8_t opcode] (1 byte)
+    DIV,         // [uint8_t opcode] (1 byte)
+    RET,         // [uint8_t opcode] (1 byte)
+    HALT,        // [uint8_t opcode] (1 byte)
+    PUSH_STR,    // [uint8_t opcode] [uint32_t string_id] (5 bytes)
+    SYS_OPEN,    // [uint8_t opcode] (1 byte)
+    SYS_READ,    // [uint8_t opcode] (1 byte)
+    SYS_WRITE,   // [uint8_t opcode] (1 byte)
+    SYS_CLOSE,   // [uint8_t opcode] (1 byte)
+    SYS_PRINTF,  // [uint8_t opcode] [uint8_t num_args] (2 bytes)
+    CALL,        // [uint8_t opcode] [uint32_t target_addr] (5 bytes)
+    JMP,         // [uint8_t opcode] [uint32_t target_addr] (5 bytes)
+    JZ,          // [uint8_t opcode] [uint32_t target_addr] (5 bytes)
+    CMP_EQ,      // [uint8_t opcode] (1 byte)
+    CMP_LE,      // [uint8_t opcode] (1 byte)
+    CMP_LT,      // [uint8_t opcode] (1 byte)
+    CMP_GT,      // [uint8_t opcode] (1 byte)
+    CMP_GE       // [uint8_t opcode] (1 byte)
 };
 
 struct IRProgram {

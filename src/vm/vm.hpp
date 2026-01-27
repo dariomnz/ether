@@ -15,11 +15,11 @@ enum class ValueType : uint8_t { Int, String };
 
 struct Value {
     ValueType type;
+    uint32_t str_len;     // for string_view support
     union {
         int32_t i32;
         const char* str;  // string_view representation
     } as;
-    uint32_t str_len;     // for string_view support
 
     Value() : type(ValueType::Int) { as.i32 = 0; }
     Value(int32_t v) : type(ValueType::Int) { as.i32 = v; }

@@ -67,6 +67,27 @@ struct ExpressionStatement : Statement {
     explicit ExpressionStatement(std::unique_ptr<Expression> e) : expr(std::move(e)) {}
 };
 
+struct AssignmentExpression : Expression {
+    std::string name;
+    std::unique_ptr<Expression> value;
+    AssignmentExpression(std::string n, std::unique_ptr<Expression> v) : name(std::move(n)), value(std::move(v)) {}
+};
+
+struct IncrementExpression : Expression {
+    std::string name;
+    explicit IncrementExpression(std::string n) : name(std::move(n)) {}
+};
+
+struct ForStatement : Statement {
+    std::unique_ptr<Statement> init;
+    std::unique_ptr<Expression> condition;
+    std::unique_ptr<Expression> increment;
+    std::unique_ptr<Block> body;
+    ForStatement(std::unique_ptr<Statement> i, std::unique_ptr<Expression> c, std::unique_ptr<Expression> inc,
+                 std::unique_ptr<Block> b)
+        : init(std::move(i)), condition(std::move(c)), increment(std::move(inc)), body(std::move(b)) {}
+};
+
 struct VariableDeclaration : Statement {
     std::string name;
     std::unique_ptr<Expression> init;

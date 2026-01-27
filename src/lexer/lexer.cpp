@@ -133,8 +133,13 @@ Token Lexer::next_token() {
     std::string lexeme(m_source.substr(m_pos - 1, 1));
 
     switch (c) {
-        case '+':
+        case '+': {
+            if (peek() == '+') {
+                advance();
+                return {TokenType::PlusPlus, "++", start_line, start_col};
+            }
             return {TokenType::Plus, lexeme, start_line, start_col};
+        }
         case '-':
             return {TokenType::Minus, lexeme, start_line, start_col};
         case '*':
