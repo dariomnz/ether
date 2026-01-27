@@ -4,10 +4,14 @@
     "description": "Syntax highlighting and language support for Ether.",
     "version": "0.1.0",
     "publisher": "dariomnz",
-    "icon": "./icons/ether.png",
+    "icon": "icons/ether.png",
+    "main": "./src/extension.js",
     "engines": {
         "vscode": "^1.74.0"
     },
+    "activationEvents": [
+        "onLanguage:ether"
+    ],
     "categories": [
         "Programming Languages"
     ],
@@ -35,6 +39,19 @@
                 "scopeName": "source.eth",
                 "path": "./syntaxes/ether.tmLanguage.json"
             }
-        ]
+        ],
+        "configuration": {
+            "title": "Ether",
+            "properties": {
+                "ether.compilerPath": {
+                    "type": "string",
+                    "default": "ether",
+                    "description": "Path to the ether compiler executable."
+                }
+            }
+        }
+    },
+    "dependencies": {
+        "vscode-languageclient": "^8.0.2"
     }
 }

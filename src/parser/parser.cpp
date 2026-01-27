@@ -81,7 +81,8 @@ std::unique_ptr<Function> Parser::parse_function() {
         const auto &token = peek();
         throw CompilerError("Expected function name", m_filename, token.line, token.column);
     }
-    auto name = advance().lexeme;
+    const auto &name_token = advance();
+    auto name = name_token.lexeme;
 
     if (!match(lexer::TokenType::LParent)) {
         const auto &token = peek();
@@ -106,8 +107,9 @@ std::unique_ptr<Function> Parser::parse_function() {
     }
 
     auto body = parse_block();
-    return std::make_unique<Function>(return_type, std::string(name), std::move(params), std::move(body), m_filename,
-                                      start_token.line, start_token.column);
+    return std::make_unique<Function>(return_type, std::string(name), name_token.line, name_token.column,
+                                      std::move(params), std::move(body), m_filename, start_token.line,
+                                      start_token.column);
 }
 
 std::unique_ptr<Block> Parser::parse_block() {
@@ -190,7 +192,8 @@ std::unique_ptr<Statement> Parser::parse_statement() {
             const auto &token = peek();
             throw CompilerError("Expected variable name after type", m_filename, token.line, token.column);
         }
-        auto name = advance().lexeme;
+        const auto &name_token = advance();
+        auto name = name_token.lexeme;
         std::unique_ptr<Expression> init = nullptr;
         if (match(lexer::TokenType::Equal)) {
             init = parse_expression();
@@ -199,8 +202,8 @@ std::unique_ptr<Statement> Parser::parse_statement() {
             const auto &token = peek();
             throw CompilerError("Expected ';' after declaration", m_filename, token.line, token.column);
         }
-        return std::make_unique<VariableDeclaration>(type, std::string(name), std::move(init), m_filename,
-                                                     start_token.line, start_token.column);
+        return std::make_unique<VariableDeclaration>(type, std::string(name), name_token.line, name_token.column,
+                                                     std::move(init), m_filename, start_token.line, start_token.column);
     }
 
     if (match(lexer::TokenType::Yield)) {
@@ -226,21 +229,27 @@ std::unique_ptr<Expression> Parser::parse_expression() {
         // Lookahead to see if it's an assignment or increment
         if (m_pos + 1 < m_tokens.size()) {
             if (m_tokens[m_pos + 1].type == lexer::TokenType::Equal) {
-                std::string name(advance().lexeme);
+                const auto &id_token = advance();
+                auto lvalue = std::make_unique<VariableExpression>(std::string(id_token.lexeme), m_filename,
+                                                                   id_token.line, id_token.column);
                 advance();  // skip '='
-                return std::make_unique<AssignmentExpression>(std::move(name), parse_expression(), m_filename,
+                return std::make_unique<AssignmentExpression>(std::move(lvalue), parse_expression(), m_filename,
                                                               start_token.line, start_token.column);
             }
             if (m_tokens[m_pos + 1].type == lexer::TokenType::PlusPlus) {
-                std::string name(advance().lexeme);
+                const auto &id_token = advance();
+                auto lvalue = std::make_unique<VariableExpression>(std::string(id_token.lexeme), m_filename,
+                                                                   id_token.line, id_token.column);
                 advance();  // skip '++'
-                return std::make_unique<IncrementExpression>(std::move(name), m_filename, start_token.line,
+                return std::make_unique<IncrementExpression>(std::move(lvalue), m_filename, start_token.line,
                                                              start_token.column);
             }
             if (m_tokens[m_pos + 1].type == lexer::TokenType::MinusMinus) {
-                std::string name(advance().lexeme);
+                const auto &id_token = advance();
+                auto lvalue = std::make_unique<VariableExpression>(std::string(id_token.lexeme), m_filename,
+                                                                   id_token.line, id_token.column);
                 advance();  // skip '--'
-                return std::make_unique<DecrementExpression>(std::move(name), m_filename, start_token.line,
+                return std::make_unique<DecrementExpression>(std::move(lvalue), m_filename, start_token.line,
                                                              start_token.column);
             }
         }

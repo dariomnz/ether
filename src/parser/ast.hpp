@@ -7,6 +7,48 @@
 #include <vector>
 
 namespace ether::parser {
+struct IntegerLiteral;
+struct StringLiteral;
+struct VariableExpression;
+struct FunctionCall;
+struct BinaryExpression;
+struct Block;
+struct IfStatement;
+struct ReturnStatement;
+struct ExpressionStatement;
+struct YieldStatement;
+struct SpawnExpression;
+struct AssignmentExpression;
+struct IncrementExpression;
+struct DecrementExpression;
+struct AwaitExpression;
+struct ForStatement;
+struct VariableDeclaration;
+struct Function;
+struct Program;
+
+struct ASTVisitor {
+    virtual ~ASTVisitor() = default;
+    virtual void visit(IntegerLiteral& node) = 0;
+    virtual void visit(StringLiteral& node) = 0;
+    virtual void visit(VariableExpression& node) = 0;
+    virtual void visit(FunctionCall& node) = 0;
+    virtual void visit(BinaryExpression& node) = 0;
+    virtual void visit(Block& node) = 0;
+    virtual void visit(IfStatement& node) = 0;
+    virtual void visit(ReturnStatement& node) = 0;
+    virtual void visit(ExpressionStatement& node) = 0;
+    virtual void visit(YieldStatement& node) = 0;
+    virtual void visit(SpawnExpression& node) = 0;
+    virtual void visit(AssignmentExpression& node) = 0;
+    virtual void visit(IncrementExpression& node) = 0;
+    virtual void visit(DecrementExpression& node) = 0;
+    virtual void visit(AwaitExpression& node) = 0;
+    virtual void visit(ForStatement& node) = 0;
+    virtual void visit(VariableDeclaration& node) = 0;
+    virtual void visit(Function& node) = 0;
+    virtual void visit(Program& node) = 0;
+};
 
 struct ASTNode {
     std::string filename;
@@ -14,6 +56,7 @@ struct ASTNode {
     int column;
     ASTNode(std::string fn, int l, int c) : filename(std::move(fn)), line(l), column(c) {}
     virtual ~ASTNode() = default;
+    virtual void accept(ASTVisitor& visitor) = 0;
 };
 
 struct DataType {
@@ -21,7 +64,7 @@ struct DataType {
     Kind kind;
     DataType() : kind(Kind::Int) {}
     explicit DataType(Kind k) : kind(k) {}
-    bool operator==(const DataType &other) const { return kind == other.kind; }
+    bool operator==(const DataType& other) const { return kind == other.kind; }
 };
 
 struct Expression : ASTNode {
@@ -35,24 +78,34 @@ struct Statement : ASTNode {
 struct IntegerLiteral : Expression {
     int value;
     IntegerLiteral(int val, std::string fn, int l, int c) : Expression(std::move(fn), l, c), value(val) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct StringLiteral : Expression {
     std::string value;
     StringLiteral(std::string v, std::string fn, int l, int c) : Expression(std::move(fn), l, c), value(std::move(v)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct VariableExpression : Expression {
     std::string name;
+    std::string decl_filename;
+    int decl_line = 0;
+    int decl_col = 0;
     VariableExpression(std::string n, std::string fn, int l, int c)
         : Expression(std::move(fn), l, c), name(std::move(n)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct FunctionCall : Expression {
     std::string name;
     std::vector<std::unique_ptr<Expression>> args;
+    std::string decl_filename;
+    int decl_line = 0;
+    int decl_col = 0;
     FunctionCall(std::string n, std::vector<std::unique_ptr<Expression>> a, std::string fn, int l, int c)
         : Expression(std::move(fn), l, c), name(std::move(n)), args(std::move(a)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct BinaryExpression : Expression {
@@ -64,11 +117,13 @@ struct BinaryExpression : Expression {
     BinaryExpression(Op o, std::unique_ptr<Expression> l, std::unique_ptr<Expression> r, std::string fn, int line,
                      int c)
         : Expression(std::move(fn), line, c), op(o), left(std::move(l)), right(std::move(r)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct Block : Statement {
     std::vector<std::unique_ptr<Statement>> statements;
     Block(std::string fn, int l, int c) : Statement(std::move(fn), l, c) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct IfStatement : Statement {
@@ -81,53 +136,63 @@ struct IfStatement : Statement {
           condition(std::move(cond)),
           then_branch(std::move(tb)),
           else_branch(std::move(eb)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct ReturnStatement : Statement {
     std::unique_ptr<Expression> expr;
     ReturnStatement(std::unique_ptr<Expression> e, std::string fn, int l, int c)
         : Statement(std::move(fn), l, c), expr(std::move(e)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct ExpressionStatement : Statement {
     std::unique_ptr<Expression> expr;
     ExpressionStatement(std::unique_ptr<Expression> e, std::string fn, int l, int c)
         : Statement(std::move(fn), l, c), expr(std::move(e)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct YieldStatement : Statement {
     YieldStatement(std::string fn, int l, int c) : Statement(std::move(fn), l, c) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct SpawnExpression : Expression {
     std::unique_ptr<FunctionCall> call;
     SpawnExpression(std::unique_ptr<FunctionCall> c, std::string fn, int l, int c_pos)
         : Expression(std::move(fn), l, c_pos), call(std::move(c)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct AssignmentExpression : Expression {
-    std::string name;
+    std::unique_ptr<VariableExpression> lvalue;
     std::unique_ptr<Expression> value;
-    AssignmentExpression(std::string n, std::unique_ptr<Expression> v, std::string fn, int l, int c)
-        : Expression(std::move(fn), l, c), name(std::move(n)), value(std::move(v)) {}
+    AssignmentExpression(std::unique_ptr<VariableExpression> lv, std::unique_ptr<Expression> v, std::string fn, int l,
+                         int c)
+        : Expression(std::move(fn), l, c), lvalue(std::move(lv)), value(std::move(v)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct IncrementExpression : Expression {
-    std::string name;
-    IncrementExpression(std::string n, std::string fn, int l, int c)
-        : Expression(std::move(fn), l, c), name(std::move(n)) {}
+    std::unique_ptr<VariableExpression> lvalue;
+    IncrementExpression(std::unique_ptr<VariableExpression> lv, std::string fn, int l, int c)
+        : Expression(std::move(fn), l, c), lvalue(std::move(lv)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct DecrementExpression : Expression {
-    std::string name;
-    DecrementExpression(std::string n, std::string fn, int l, int c)
-        : Expression(std::move(fn), l, c), name(std::move(n)) {}
+    std::unique_ptr<VariableExpression> lvalue;
+    DecrementExpression(std::unique_ptr<VariableExpression> lv, std::string fn, int l, int c)
+        : Expression(std::move(fn), l, c), lvalue(std::move(lv)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct AwaitExpression : Expression {
     std::unique_ptr<Expression> expr;
     AwaitExpression(std::unique_ptr<Expression> e, std::string fn, int l, int c)
         : Expression(std::move(fn), l, c), expr(std::move(e)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct ForStatement : Statement {
@@ -142,14 +207,24 @@ struct ForStatement : Statement {
           condition(std::move(c)),
           increment(std::move(inc)),
           body(std::move(b)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct VariableDeclaration : Statement {
     DataType type;
     std::string name;
+    int name_line;
+    int name_col;
     std::unique_ptr<Expression> init;
-    VariableDeclaration(DataType t, std::string n, std::unique_ptr<Expression> i, std::string fn, int l, int c)
-        : Statement(std::move(fn), l, c), type(t), name(std::move(n)), init(std::move(i)) {}
+    VariableDeclaration(DataType t, std::string n, int nl, int nc, std::unique_ptr<Expression> i, std::string fn, int l,
+                        int c)
+        : Statement(std::move(fn), l, c),
+          type(t),
+          name(std::move(n)),
+          name_line(nl),
+          name_col(nc),
+          init(std::move(i)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct Parameter {
@@ -160,20 +235,26 @@ struct Parameter {
 struct Function : Expression {
     DataType return_type;
     std::string name;
+    int name_line;
+    int name_col;
     std::vector<Parameter> params;
     std::unique_ptr<Block> body;
-    Function(DataType rt, std::string n, std::vector<Parameter> p, std::unique_ptr<Block> b, std::string fn, int l,
-             int c)
+    Function(DataType rt, std::string n, int nl, int nc, std::vector<Parameter> p, std::unique_ptr<Block> b,
+             std::string fn, int l, int c)
         : Expression(std::move(fn), l, c),
           return_type(rt),
           name(std::move(n)),
+          name_line(nl),
+          name_col(nc),
           params(std::move(p)),
           body(std::move(b)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 struct Program : ASTNode {
     std::vector<std::unique_ptr<Function>> functions;
     Program() : ASTNode("", 0, 0) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
 };
 
 }  // namespace ether::parser

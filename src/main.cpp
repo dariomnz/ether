@@ -11,6 +11,7 @@
 #include "ir/ir.hpp"
 #include "ir/ir_gen.hpp"
 #include "lexer/lexer.hpp"
+#include "lsp/server.hpp"
 #include "parser/parser.hpp"
 #include "sema/analyzer.hpp"
 #include "test_runner/test_runner.hpp"
@@ -204,7 +205,7 @@ void print_stats(const ether::vm::VM &vm, double total_ms, double lex_ms, double
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        std::cerr << "Usage: ether <filename|--test> [path] [--dump-ir] [--stats]" << std::endl;
+        std::cerr << "Usage: ether <filename|--test|--lsp> [path] [--dump-ir] [--stats]" << std::endl;
         return 1;
     }
 
@@ -215,6 +216,12 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         return ether::run_tests(argv[0], argv[2]);
+    }
+
+    if (first_arg == "--lsp") {
+        ether::lsp::LSPServer server;
+        server.run();
+        return 0;
     }
 
     std::string filename = first_arg;

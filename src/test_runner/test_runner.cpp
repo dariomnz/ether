@@ -86,8 +86,10 @@ bool run_test(const std::string& ether_bin, const TestCase& tc) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
         if (errors.empty()) {
+            // Remove the line output to the terminal
             std::cout << "\033[32mPASSED\033[0m in " << std::fixed << std::setprecision(3) << elapsed.count()
-                      << " seconds" << std::endl;
+                      << " seconds" << std::flush;
+            std::cout << "\r\033[K" << std::flush;
             return true;
         } else {
             std::cout << "\033[31mFAILED\033[0m in " << std::fixed << std::setprecision(3) << elapsed.count()

@@ -94,7 +94,6 @@ void IRGenerator::visit_statement(const parser::Statement &stmt) {
         emit_byte(get_var_slot(decl->name));
     } else if (auto expr_stmt = dynamic_cast<const parser::ExpressionStatement *>(&stmt)) {
         visit_expression(*expr_stmt->expr);
-        emit_opcode(ir::OpCode::POP);
     } else if (auto if_stmt = dynamic_cast<const parser::IfStatement *>(&stmt)) {
         visit_expression(*if_stmt->condition);
         auto jump_to_else = emit_jump(ir::OpCode::JZ);
@@ -145,32 +144,29 @@ void IRGenerator::visit_expression(const parser::Expression &expr) {
     } else if (auto assign = dynamic_cast<const parser::AssignmentExpression *>(&expr)) {
         visit_expression(*assign->value);
         emit_opcode(ir::OpCode::STORE_VAR);
-        emit_byte(get_var_slot(assign->name));
-        // Push the value back to the stack because an assignment is an expression
-        emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte(get_var_slot(assign->name));
+        emit_byte(get_var_slot(assign->lvalue->name));
     } else if (auto inc = dynamic_cast<const parser::IncrementExpression *>(&expr)) {
         emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte(get_var_slot(inc->name));
+        emit_byte(get_var_slot(inc->lvalue->name));
         emit_opcode(ir::OpCode::PUSH_INT);
         emit_int(1);
         emit_opcode(ir::OpCode::ADD);
         emit_opcode(ir::OpCode::STORE_VAR);
-        emit_byte(get_var_slot(inc->name));
+        emit_byte(get_var_slot(inc->lvalue->name));
         // Push result for expression consistency
         emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte(get_var_slot(inc->name));
+        emit_byte(get_var_slot(inc->lvalue->name));
     } else if (auto dec = dynamic_cast<const parser::DecrementExpression *>(&expr)) {
         emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte(get_var_slot(dec->name));
+        emit_byte(get_var_slot(dec->lvalue->name));
         emit_opcode(ir::OpCode::PUSH_INT);
         emit_int(1);
         emit_opcode(ir::OpCode::SUB);
         emit_opcode(ir::OpCode::STORE_VAR);
-        emit_byte(get_var_slot(dec->name));
+        emit_byte(get_var_slot(dec->lvalue->name));
         // Push result for expression consistency
         emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte(get_var_slot(dec->name));
+        emit_byte(get_var_slot(dec->lvalue->name));
     } else if (auto await_expr = dynamic_cast<const parser::AwaitExpression *>(&expr)) {
         visit_expression(*await_expr->expr);
         emit_opcode(ir::OpCode::AWAIT);

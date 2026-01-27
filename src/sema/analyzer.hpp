@@ -16,6 +16,9 @@ class Analyzer {
    private:
     struct Symbol {
         parser::DataType type;
+        std::string filename;
+        int line;
+        int col;
     };
 
     struct Scope {
@@ -25,6 +28,9 @@ class Analyzer {
     struct FunctionInfo {
         parser::DataType return_type;
         std::vector<parser::DataType> param_types;
+        std::string filename;
+        int line;
+        int col;
     };
 
     std::vector<Scope> m_scopes;
@@ -37,8 +43,10 @@ class Analyzer {
 
     void push_scope();
     void pop_scope();
-    void define_variable(const std::string &name, parser::DataType type);
+    void define_variable(const std::string &name, parser::DataType type, std::string filename, int line, int col);
     parser::DataType lookup_variable(const std::string &name, std::string filename, int line, int col);
+    const Symbol *lookup_symbol(const std::string &name);
+    const FunctionInfo *lookup_function(const std::string &name);
 };
 
 }  // namespace ether::sema
