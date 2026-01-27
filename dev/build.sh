@@ -18,3 +18,5 @@ for arg in "$@"; do
 done
 
 cmake --build ${build_dir} -j $(nproc) ${FLAGS}
+
+./build/test_runner ./build/ether ./test

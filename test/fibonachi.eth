@@ -1,3 +1,4 @@
+// EXPECTED_RESULT: 6765
 #include "std/io.eth"
 
 // Recursive function to calculate Fibonacci
@@ -9,6 +10,6 @@ int fibonacci(int n) {
 }
 
 int main() {
-    int fib = fibonacci(30);
+    int fib = fibonacci(20);
     return fib;
 }

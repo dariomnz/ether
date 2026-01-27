@@ -15,3 +15,5 @@ add_executable(ether
 )
 
 target_include_directories(ether PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_executable(test_runner test/test_runner.cpp)

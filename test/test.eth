@@ -1,3 +1,4 @@
+// EXPECTED_RESULT: 25
 int main() {
     int a = 5;
     int b = 10;

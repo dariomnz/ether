@@ -1,9 +1,23 @@
+// EXPECTED_OUTPUT: --- Multiplication Table of 5 ---
+// EXPECTED_OUTPUT: 5 x 1 = 5
+// EXPECTED_OUTPUT: 5 x 2 = 10
+// EXPECTED_OUTPUT: 5 x 3 = 15
+// EXPECTED_OUTPUT: 5 x 4 = 20
+// EXPECTED_OUTPUT: 5 x 5 = 25
+// EXPECTED_OUTPUT: 5 x 6 = 30
+// EXPECTED_OUTPUT: 5 x 7 = 35
+// EXPECTED_OUTPUT: 5 x 8 = 40
+// EXPECTED_OUTPUT: 5 x 9 = 45
+// EXPECTED_OUTPUT: 5 x 10 = 50
+// EXPECTED_OUTPUT: ------------------------------
+// EXPECTED_OUTPUT: Program finished successfully.
+// EXPECTED_RESULT: 0
 #include "std/io.eth"
 
 int main() {
     // Variable declarations and initialization
     int number = 5;    // The number we want the table for
-    int range = 1000;  // How far the table goes
+    int range = 10;  // How far the table goes
     int result;
 
     printf("--- Multiplication Table of %d ---\n", number);

@@ -1,3 +1,4 @@
+// EXPECTED_OUTPUT: Hello, World!
 #include "std/io.eth"
 
 int main() {
