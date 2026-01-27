@@ -1,0 +1,9 @@
+int main() {
+    p_int(42);
+    return 0;
+}
+
+int p_int(int x) {
+    printf("%d\n", x);
+    return x;
+}

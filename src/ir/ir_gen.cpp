@@ -9,6 +9,7 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
     m_program.bytecode.clear();
     m_program.string_pool.clear();
     m_program.functions.clear();
+    m_call_patches.clear();
 
     // First pass: collect function signatures and names
     for (const auto &func : ast.functions) {
@@ -19,6 +20,11 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
     ast.accept(*this);
 
     emit_opcode(ir::OpCode::HALT);
+
+    for (const auto &patch : m_call_patches) {
+        uint32_t addr = (uint32_t)m_program.functions.at(patch.func_name).entry_addr;
+        std::memcpy(&m_program.bytecode[patch.pos], &addr, 4);
+    }
 
     for (const auto &[name, info] : m_program.functions) {
         m_program.addr_to_info[info.entry_addr] = info;
@@ -204,7 +210,8 @@ void IRGenerator::visit(const parser::SpawnExpression &node) {
         arg->accept(*this);
     }
     emit_opcode(ir::OpCode::SPAWN);
-    emit_uint32((uint32_t)m_program.functions.at(node.call->name).entry_addr);
+    m_call_patches.push_back({m_program.bytecode.size(), node.call->name});
+    emit_uint32(0);
 }
 
 void IRGenerator::visit(const parser::BinaryExpression &node) {
@@ -259,7 +266,8 @@ void IRGenerator::visit(const parser::FunctionCall &node) {
         emit_byte((uint8_t)node.args.size());
     } else {
         emit_opcode(ir::OpCode::CALL);
-        emit_uint32((uint32_t)m_program.functions.at(node.name).entry_addr);
+        m_call_patches.push_back({m_program.bytecode.size(), node.name});
+        emit_uint32(0);
     }
 }
 

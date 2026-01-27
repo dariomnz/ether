@@ -63,6 +63,12 @@ class IRGenerator : public parser::ASTVisitor {
     };
     JumpPlaceholder emit_jump(ir::OpCode op);
     void patch_jump(JumpPlaceholder jp, uint32_t target);
+
+    struct CallPatch {
+        size_t pos;
+        std::string func_name;
+    };
+    std::vector<CallPatch> m_call_patches;
 };
 
 }  // namespace ether::ir_gen
