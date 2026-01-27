@@ -11,9 +11,29 @@
 
 namespace ether::ir_gen {
 
-class IRGenerator {
+class IRGenerator : public parser::ASTVisitor {
    public:
     ir::IRProgram generate(const parser::Program &ast);
+
+    void visit(const parser::IntegerLiteral &node) override;
+    void visit(const parser::StringLiteral &node) override;
+    void visit(const parser::VariableExpression &node) override;
+    void visit(const parser::FunctionCall &node) override;
+    void visit(const parser::BinaryExpression &node) override;
+    void visit(const parser::Block &node) override;
+    void visit(const parser::IfStatement &node) override;
+    void visit(const parser::ReturnStatement &node) override;
+    void visit(const parser::ExpressionStatement &node) override;
+    void visit(const parser::YieldStatement &node) override;
+    void visit(const parser::SpawnExpression &node) override;
+    void visit(const parser::AssignmentExpression &node) override;
+    void visit(const parser::IncrementExpression &node) override;
+    void visit(const parser::DecrementExpression &node) override;
+    void visit(const parser::AwaitExpression &node) override;
+    void visit(const parser::ForStatement &node) override;
+    void visit(const parser::VariableDeclaration &node) override;
+    void visit(const parser::Function &node) override;
+    void visit(const parser::Program &node) override;
 
    private:
     ir::IRProgram m_program;
@@ -27,11 +47,6 @@ class IRGenerator {
         uint8_t next_slot = 0;
     };
     std::vector<Scope> m_scopes;
-
-    void visit_function(const parser::Function &func);
-    void visit_block(const parser::Block &block);
-    void visit_statement(const parser::Statement &stmt);
-    void visit_expression(const parser::Expression &expr);
 
     // Helpers
     void emit_byte(uint8_t byte) { m_program.bytecode.push_back(byte); }

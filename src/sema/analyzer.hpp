@@ -9,9 +9,29 @@
 
 namespace ether::sema {
 
-class Analyzer {
+class Analyzer : public parser::ASTVisitor {
    public:
     void analyze(parser::Program &program);
+
+    void visit(parser::IntegerLiteral &node) override;
+    void visit(parser::StringLiteral &node) override;
+    void visit(parser::VariableExpression &node) override;
+    void visit(parser::FunctionCall &node) override;
+    void visit(parser::BinaryExpression &node) override;
+    void visit(parser::Block &node) override;
+    void visit(parser::IfStatement &node) override;
+    void visit(parser::ReturnStatement &node) override;
+    void visit(parser::ExpressionStatement &node) override;
+    void visit(parser::YieldStatement &node) override;
+    void visit(parser::SpawnExpression &node) override;
+    void visit(parser::AssignmentExpression &node) override;
+    void visit(parser::IncrementExpression &node) override;
+    void visit(parser::DecrementExpression &node) override;
+    void visit(parser::AwaitExpression &node) override;
+    void visit(parser::ForStatement &node) override;
+    void visit(parser::VariableDeclaration &node) override;
+    void visit(parser::Function &node) override;
+    void visit(parser::Program &node) override;
 
    private:
     struct Symbol {
@@ -35,11 +55,7 @@ class Analyzer {
 
     std::vector<Scope> m_scopes;
     std::unordered_map<std::string, FunctionInfo> m_functions;
-
-    void visit_function(parser::Function &func);
-    void visit_block(parser::Block &block);
-    void visit_statement(parser::Statement &stmt);
-    parser::DataType visit_expression(parser::Expression &expr);
+    parser::DataType m_current_type;
 
     void push_scope();
     void pop_scope();

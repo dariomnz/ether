@@ -29,25 +29,44 @@ struct Program;
 
 struct ASTVisitor {
     virtual ~ASTVisitor() = default;
-    virtual void visit(IntegerLiteral& node) = 0;
-    virtual void visit(StringLiteral& node) = 0;
-    virtual void visit(VariableExpression& node) = 0;
-    virtual void visit(FunctionCall& node) = 0;
-    virtual void visit(BinaryExpression& node) = 0;
-    virtual void visit(Block& node) = 0;
-    virtual void visit(IfStatement& node) = 0;
-    virtual void visit(ReturnStatement& node) = 0;
-    virtual void visit(ExpressionStatement& node) = 0;
-    virtual void visit(YieldStatement& node) = 0;
-    virtual void visit(SpawnExpression& node) = 0;
-    virtual void visit(AssignmentExpression& node) = 0;
-    virtual void visit(IncrementExpression& node) = 0;
-    virtual void visit(DecrementExpression& node) = 0;
-    virtual void visit(AwaitExpression& node) = 0;
-    virtual void visit(ForStatement& node) = 0;
-    virtual void visit(VariableDeclaration& node) = 0;
-    virtual void visit(Function& node) = 0;
-    virtual void visit(Program& node) = 0;
+    virtual void visit(IntegerLiteral& node) { visit(static_cast<const IntegerLiteral&>(node)); }
+    virtual void visit(const IntegerLiteral& node) {}
+    virtual void visit(StringLiteral& node) { visit(static_cast<const StringLiteral&>(node)); }
+    virtual void visit(const StringLiteral& node) {}
+    virtual void visit(VariableExpression& node) { visit(static_cast<const VariableExpression&>(node)); }
+    virtual void visit(const VariableExpression& node) {}
+    virtual void visit(FunctionCall& node) { visit(static_cast<const FunctionCall&>(node)); }
+    virtual void visit(const FunctionCall& node) {}
+    virtual void visit(BinaryExpression& node) { visit(static_cast<const BinaryExpression&>(node)); }
+    virtual void visit(const BinaryExpression& node) {}
+    virtual void visit(Block& node) { visit(static_cast<const Block&>(node)); }
+    virtual void visit(const Block& node) {}
+    virtual void visit(IfStatement& node) { visit(static_cast<const IfStatement&>(node)); }
+    virtual void visit(const IfStatement& node) {}
+    virtual void visit(ReturnStatement& node) { visit(static_cast<const ReturnStatement&>(node)); }
+    virtual void visit(const ReturnStatement& node) {}
+    virtual void visit(ExpressionStatement& node) { visit(static_cast<const ExpressionStatement&>(node)); }
+    virtual void visit(const ExpressionStatement& node) {}
+    virtual void visit(YieldStatement& node) { visit(static_cast<const YieldStatement&>(node)); }
+    virtual void visit(const YieldStatement& node) {}
+    virtual void visit(SpawnExpression& node) { visit(static_cast<const SpawnExpression&>(node)); }
+    virtual void visit(const SpawnExpression& node) {}
+    virtual void visit(AssignmentExpression& node) { visit(static_cast<const AssignmentExpression&>(node)); }
+    virtual void visit(const AssignmentExpression& node) {}
+    virtual void visit(IncrementExpression& node) { visit(static_cast<const IncrementExpression&>(node)); }
+    virtual void visit(const IncrementExpression& node) {}
+    virtual void visit(DecrementExpression& node) { visit(static_cast<const DecrementExpression&>(node)); }
+    virtual void visit(const DecrementExpression& node) {}
+    virtual void visit(AwaitExpression& node) { visit(static_cast<const AwaitExpression&>(node)); }
+    virtual void visit(const AwaitExpression& node) {}
+    virtual void visit(ForStatement& node) { visit(static_cast<const ForStatement&>(node)); }
+    virtual void visit(const ForStatement& node) {}
+    virtual void visit(VariableDeclaration& node) { visit(static_cast<const VariableDeclaration&>(node)); }
+    virtual void visit(const VariableDeclaration& node) {}
+    virtual void visit(Function& node) { visit(static_cast<const Function&>(node)); }
+    virtual void visit(const Function& node) {}
+    virtual void visit(Program& node) { visit(static_cast<const Program&>(node)); }
+    virtual void visit(const Program& node) {}
 };
 
 struct ASTNode {
@@ -57,6 +76,7 @@ struct ASTNode {
     ASTNode(std::string fn, int l, int c) : filename(std::move(fn)), line(l), column(c) {}
     virtual ~ASTNode() = default;
     virtual void accept(ASTVisitor& visitor) = 0;
+    virtual void accept(ASTVisitor& visitor) const = 0;
 };
 
 struct DataType {
@@ -79,12 +99,14 @@ struct IntegerLiteral : Expression {
     int value;
     IntegerLiteral(int val, std::string fn, int l, int c) : Expression(std::move(fn), l, c), value(val) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct StringLiteral : Expression {
     std::string value;
     StringLiteral(std::string v, std::string fn, int l, int c) : Expression(std::move(fn), l, c), value(std::move(v)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct VariableExpression : Expression {
@@ -95,6 +117,7 @@ struct VariableExpression : Expression {
     VariableExpression(std::string n, std::string fn, int l, int c)
         : Expression(std::move(fn), l, c), name(std::move(n)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct FunctionCall : Expression {
@@ -106,6 +129,7 @@ struct FunctionCall : Expression {
     FunctionCall(std::string n, std::vector<std::unique_ptr<Expression>> a, std::string fn, int l, int c)
         : Expression(std::move(fn), l, c), name(std::move(n)), args(std::move(a)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct BinaryExpression : Expression {
@@ -118,12 +142,14 @@ struct BinaryExpression : Expression {
                      int c)
         : Expression(std::move(fn), line, c), op(o), left(std::move(l)), right(std::move(r)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct Block : Statement {
     std::vector<std::unique_ptr<Statement>> statements;
     Block(std::string fn, int l, int c) : Statement(std::move(fn), l, c) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct IfStatement : Statement {
@@ -137,6 +163,7 @@ struct IfStatement : Statement {
           then_branch(std::move(tb)),
           else_branch(std::move(eb)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct ReturnStatement : Statement {
@@ -144,6 +171,7 @@ struct ReturnStatement : Statement {
     ReturnStatement(std::unique_ptr<Expression> e, std::string fn, int l, int c)
         : Statement(std::move(fn), l, c), expr(std::move(e)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct ExpressionStatement : Statement {
@@ -151,11 +179,13 @@ struct ExpressionStatement : Statement {
     ExpressionStatement(std::unique_ptr<Expression> e, std::string fn, int l, int c)
         : Statement(std::move(fn), l, c), expr(std::move(e)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct YieldStatement : Statement {
     YieldStatement(std::string fn, int l, int c) : Statement(std::move(fn), l, c) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct SpawnExpression : Expression {
@@ -163,6 +193,7 @@ struct SpawnExpression : Expression {
     SpawnExpression(std::unique_ptr<FunctionCall> c, std::string fn, int l, int c_pos)
         : Expression(std::move(fn), l, c_pos), call(std::move(c)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct AssignmentExpression : Expression {
@@ -172,6 +203,7 @@ struct AssignmentExpression : Expression {
                          int c)
         : Expression(std::move(fn), l, c), lvalue(std::move(lv)), value(std::move(v)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct IncrementExpression : Expression {
@@ -179,6 +211,7 @@ struct IncrementExpression : Expression {
     IncrementExpression(std::unique_ptr<VariableExpression> lv, std::string fn, int l, int c)
         : Expression(std::move(fn), l, c), lvalue(std::move(lv)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct DecrementExpression : Expression {
@@ -186,6 +219,7 @@ struct DecrementExpression : Expression {
     DecrementExpression(std::unique_ptr<VariableExpression> lv, std::string fn, int l, int c)
         : Expression(std::move(fn), l, c), lvalue(std::move(lv)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct AwaitExpression : Expression {
@@ -193,6 +227,7 @@ struct AwaitExpression : Expression {
     AwaitExpression(std::unique_ptr<Expression> e, std::string fn, int l, int c)
         : Expression(std::move(fn), l, c), expr(std::move(e)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct ForStatement : Statement {
@@ -208,6 +243,7 @@ struct ForStatement : Statement {
           increment(std::move(inc)),
           body(std::move(b)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct VariableDeclaration : Statement {
@@ -225,6 +261,7 @@ struct VariableDeclaration : Statement {
           name_col(nc),
           init(std::move(i)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct Parameter {
@@ -249,12 +286,14 @@ struct Function : Expression {
           params(std::move(p)),
           body(std::move(b)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct Program : ASTNode {
     std::vector<std::unique_ptr<Function>> functions;
     Program() : ASTNode("", 0, 0) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 }  // namespace ether::parser

@@ -261,11 +261,18 @@ std::unique_ptr<Expression> Parser::parse_expression() {
         auto expr = parse_expression();
         const auto line = start_token.line;
         const auto col = start_token.column;
-        auto call = std::unique_ptr<FunctionCall>(dynamic_cast<FunctionCall *>(expr.release()));
-        if (!call) {
+
+        struct CallCheck : ASTVisitor {
+            bool is_call = false;
+            void visit(const FunctionCall &) override { is_call = true; }
+        } checker;
+        expr->accept(checker);
+
+        if (!checker.is_call) {
             const auto &token = peek();
             throw CompilerError("Expected function call after spawn", m_filename, token.line, token.column);
         }
+        auto call = std::unique_ptr<FunctionCall>(static_cast<FunctionCall *>(expr.release()));
         return std::make_unique<SpawnExpression>(std::move(call), m_filename, line, col);
     }
     return parse_comparison();

@@ -16,11 +16,7 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
     }
 
     // Second pass: generate code
-    for (const auto &func : ast.functions) {
-        m_program.functions[func->name].entry_addr = m_program.bytecode.size();
-        if (func->name == "main") m_program.main_addr = m_program.bytecode.size();
-        visit_function(*func);
-    }
+    ast.accept(*this);
 
     emit_opcode(ir::OpCode::HALT);
 
@@ -31,7 +27,15 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
     return std::move(m_program);
 }
 
-void IRGenerator::visit_function(const parser::Function &func) {
+void IRGenerator::visit(const parser::Program &node) {
+    for (const auto &func : node.functions) {
+        m_program.functions[func->name].entry_addr = m_program.bytecode.size();
+        if (func->name == "main") m_program.main_addr = m_program.bytecode.size();
+        func->accept(*this);
+    }
+}
+
+void IRGenerator::visit(const parser::Function &func) {
     m_scopes.emplace_back();  // New scope for function
 
     // Define parameters in scope
@@ -39,24 +43,33 @@ void IRGenerator::visit_function(const parser::Function &func) {
         define_var(param.name);
     }
 
-    visit_block(*func.body);
+    func.body->accept(*this);
 
     // Ensure the function always returns.
     // We check if the last statement is a return or a block ending in a return.
     auto ends_with_ret = [](const parser::Block &b) {
-        auto is_ret = [](const parser::Statement *s) -> bool {
-            return dynamic_cast<const parser::ReturnStatement *>(s) != nullptr;
+        struct RetCheck : parser::ASTVisitor {
+            bool is_ret = false;
+            const parser::Block *nested_block = nullptr;
+            void visit(const parser::ReturnStatement &) override { is_ret = true; }
+            void visit(const parser::Block &node) override { nested_block = &node; }
         };
 
         if (b.statements.empty()) return false;
         const parser::Statement *last = b.statements.back().get();
-        if (is_ret(last)) return true;
+
+        RetCheck checker;
+        last->accept(checker);
+        if (checker.is_ret) return true;
 
         // Handle nested blocks at the end
-        while (auto nested = dynamic_cast<const parser::Block *>(last)) {
-            if (nested->statements.empty()) return false;
-            last = nested->statements.back().get();
-            if (is_ret(last)) return true;
+        while (checker.nested_block) {
+            const parser::Block *current = checker.nested_block;
+            if (current->statements.empty()) return false;
+            last = current->statements.back().get();
+            checker = RetCheck();  // Reset
+            last->accept(checker);
+            if (checker.is_ret) return true;
         }
         return false;
     };
@@ -72,163 +85,181 @@ void IRGenerator::visit_function(const parser::Function &func) {
     m_scopes.pop_back();
 }
 
-void IRGenerator::visit_block(const parser::Block &block) {
+void IRGenerator::visit(const parser::Block &block) {
     for (const auto &stmt : block.statements) {
-        visit_statement(*stmt);
+        stmt->accept(*this);
     }
 }
 
-void IRGenerator::visit_statement(const parser::Statement &stmt) {
-    if (auto ret = dynamic_cast<const parser::ReturnStatement *>(&stmt)) {
-        visit_expression(*ret->expr);
-        emit_opcode(ir::OpCode::RET);
-    } else if (auto decl = dynamic_cast<const parser::VariableDeclaration *>(&stmt)) {
-        if (decl->init) {
-            visit_expression(*decl->init);
-        } else {
-            emit_opcode(ir::OpCode::PUSH_INT);
-            emit_int(0);
-        }
-        define_var(decl->name);
-        emit_opcode(ir::OpCode::STORE_VAR);
-        emit_byte(get_var_slot(decl->name));
-    } else if (auto expr_stmt = dynamic_cast<const parser::ExpressionStatement *>(&stmt)) {
-        visit_expression(*expr_stmt->expr);
-    } else if (auto if_stmt = dynamic_cast<const parser::IfStatement *>(&stmt)) {
-        visit_expression(*if_stmt->condition);
-        auto jump_to_else = emit_jump(ir::OpCode::JZ);
-
-        visit_block(*if_stmt->then_branch);
-        auto jump_to_end = emit_jump(ir::OpCode::JMP);
-
-        patch_jump(jump_to_else, m_program.bytecode.size());
-        if (if_stmt->else_branch) {
-            visit_block(*if_stmt->else_branch);
-        }
-        patch_jump(jump_to_end, m_program.bytecode.size());
-    } else if (auto for_stmt = dynamic_cast<const parser::ForStatement *>(&stmt)) {
-        if (for_stmt->init) visit_statement(*for_stmt->init);
-
-        size_t start_label = m_program.bytecode.size();
-        JumpPlaceholder jump_to_exit{0};
-
-        if (for_stmt->condition) {
-            visit_expression(*for_stmt->condition);
-            jump_to_exit = emit_jump(ir::OpCode::JZ);
-        }
-
-        visit_block(*for_stmt->body);
-
-        if (for_stmt->increment) {
-            visit_expression(*for_stmt->increment);
-        }
-
-        emit_opcode(ir::OpCode::JMP);
-        emit_uint32((uint32_t)start_label);
-
-        if (for_stmt->condition) {
-            patch_jump(jump_to_exit, m_program.bytecode.size());
-        }
-    } else if (auto yield_stmt = dynamic_cast<const parser::YieldStatement *>(&stmt)) {
-        emit_opcode(ir::OpCode::YIELD);
-    }
+void IRGenerator::visit(const parser::ReturnStatement &node) {
+    node.expr->accept(*this);
+    emit_opcode(ir::OpCode::RET);
 }
 
-void IRGenerator::visit_expression(const parser::Expression &expr) {
-    if (auto lit = dynamic_cast<const parser::IntegerLiteral *>(&expr)) {
-        emit_opcode(ir::OpCode::PUSH_INT);
-        emit_int(lit->value);
-    } else if (auto var = dynamic_cast<const parser::VariableExpression *>(&expr)) {
-        emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte(get_var_slot(var->name));
-    } else if (auto assign = dynamic_cast<const parser::AssignmentExpression *>(&expr)) {
-        visit_expression(*assign->value);
-        emit_opcode(ir::OpCode::STORE_VAR);
-        emit_byte(get_var_slot(assign->lvalue->name));
-    } else if (auto inc = dynamic_cast<const parser::IncrementExpression *>(&expr)) {
-        emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte(get_var_slot(inc->lvalue->name));
-        emit_opcode(ir::OpCode::PUSH_INT);
-        emit_int(1);
-        emit_opcode(ir::OpCode::ADD);
-        emit_opcode(ir::OpCode::STORE_VAR);
-        emit_byte(get_var_slot(inc->lvalue->name));
-        // Push result for expression consistency
-        emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte(get_var_slot(inc->lvalue->name));
-    } else if (auto dec = dynamic_cast<const parser::DecrementExpression *>(&expr)) {
-        emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte(get_var_slot(dec->lvalue->name));
-        emit_opcode(ir::OpCode::PUSH_INT);
-        emit_int(1);
-        emit_opcode(ir::OpCode::SUB);
-        emit_opcode(ir::OpCode::STORE_VAR);
-        emit_byte(get_var_slot(dec->lvalue->name));
-        // Push result for expression consistency
-        emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte(get_var_slot(dec->lvalue->name));
-    } else if (auto await_expr = dynamic_cast<const parser::AwaitExpression *>(&expr)) {
-        visit_expression(*await_expr->expr);
-        emit_opcode(ir::OpCode::AWAIT);
-    } else if (auto spawn_expr = dynamic_cast<const parser::SpawnExpression *>(&expr)) {
-        // Push arguments
-        for (const auto &arg : spawn_expr->call->args) {
-            visit_expression(*arg);
-        }
-        emit_opcode(ir::OpCode::SPAWN);
-        emit_uint32((uint32_t)m_program.functions.at(spawn_expr->call->name).entry_addr);
-    } else if (auto bin = dynamic_cast<const parser::BinaryExpression *>(&expr)) {
-        visit_expression(*bin->left);
-        visit_expression(*bin->right);
-        switch (bin->op) {
-            case parser::BinaryExpression::Op::Add:
-                emit_opcode(ir::OpCode::ADD);
-                break;
-            case parser::BinaryExpression::Op::Sub:
-                emit_opcode(ir::OpCode::SUB);
-                break;
-            case parser::BinaryExpression::Op::Mul:
-                emit_opcode(ir::OpCode::MUL);
-                break;
-            case parser::BinaryExpression::Op::Div:
-                emit_opcode(ir::OpCode::DIV);
-                break;
-            case parser::BinaryExpression::Op::Leq:
-                emit_opcode(ir::OpCode::CMP_LE);
-                break;
-            case parser::BinaryExpression::Op::Less:
-                emit_opcode(ir::OpCode::CMP_LT);
-                break;
-            case parser::BinaryExpression::Op::Eq:
-                emit_opcode(ir::OpCode::CMP_EQ);
-                break;
-            case parser::BinaryExpression::Op::Gt:
-                emit_opcode(ir::OpCode::CMP_GT);
-                break;
-            case parser::BinaryExpression::Op::Geq:
-                emit_opcode(ir::OpCode::CMP_GE);
-                break;
-            default:
-                throw std::runtime_error("Unsupported binary op in refactored IR Gen");
-        }
-    } else if (auto str = dynamic_cast<const parser::StringLiteral *>(&expr)) {
-        emit_opcode(ir::OpCode::PUSH_STR);
-        emit_uint32(get_string_id(str->value));
-    } else if (auto call = dynamic_cast<const parser::FunctionCall *>(&expr)) {
-        for (const auto &arg : call->args) {
-            visit_expression(*arg);
-        }
-        if (call->name == "write") {
-            emit_opcode(ir::OpCode::SYS_WRITE);
-        } else if (call->name == "printf") {
-            emit_opcode(ir::OpCode::SYS_PRINTF);
-            emit_byte((uint8_t)call->args.size());
-        } else {
-            emit_opcode(ir::OpCode::CALL);
-            emit_uint32((uint32_t)m_program.functions.at(call->name).entry_addr);
-        }
+void IRGenerator::visit(const parser::VariableDeclaration &node) {
+    if (node.init) {
+        node.init->accept(*this);
     } else {
-        throw std::runtime_error("Unknown expression type in IR generation");
+        emit_opcode(ir::OpCode::PUSH_INT);
+        emit_int(0);
+    }
+    define_var(node.name);
+    emit_opcode(ir::OpCode::STORE_VAR);
+    emit_byte(get_var_slot(node.name));
+}
+
+void IRGenerator::visit(const parser::ExpressionStatement &node) { node.expr->accept(*this); }
+
+void IRGenerator::visit(const parser::IfStatement &node) {
+    node.condition->accept(*this);
+    auto jump_to_else = emit_jump(ir::OpCode::JZ);
+
+    node.then_branch->accept(*this);
+    auto jump_to_end = emit_jump(ir::OpCode::JMP);
+
+    patch_jump(jump_to_else, m_program.bytecode.size());
+    if (node.else_branch) {
+        node.else_branch->accept(*this);
+    }
+    patch_jump(jump_to_end, m_program.bytecode.size());
+}
+
+void IRGenerator::visit(const parser::ForStatement &node) {
+    if (node.init) node.init->accept(*this);
+
+    size_t start_label = m_program.bytecode.size();
+    JumpPlaceholder jump_to_exit{0};
+
+    if (node.condition) {
+        node.condition->accept(*this);
+        jump_to_exit = emit_jump(ir::OpCode::JZ);
+    }
+
+    node.body->accept(*this);
+
+    if (node.increment) {
+        node.increment->accept(*this);
+    }
+
+    emit_opcode(ir::OpCode::JMP);
+    emit_uint32((uint32_t)start_label);
+
+    if (node.condition) {
+        patch_jump(jump_to_exit, m_program.bytecode.size());
+    }
+}
+
+void IRGenerator::visit(const parser::YieldStatement &node) { emit_opcode(ir::OpCode::YIELD); }
+
+void IRGenerator::visit(const parser::IntegerLiteral &node) {
+    emit_opcode(ir::OpCode::PUSH_INT);
+    emit_int(node.value);
+}
+
+void IRGenerator::visit(const parser::VariableExpression &node) {
+    emit_opcode(ir::OpCode::LOAD_VAR);
+    emit_byte(get_var_slot(node.name));
+}
+
+void IRGenerator::visit(const parser::AssignmentExpression &node) {
+    node.value->accept(*this);
+    emit_opcode(ir::OpCode::STORE_VAR);
+    emit_byte(get_var_slot(node.lvalue->name));
+}
+
+void IRGenerator::visit(const parser::IncrementExpression &node) {
+    emit_opcode(ir::OpCode::LOAD_VAR);
+    emit_byte(get_var_slot(node.lvalue->name));
+    emit_opcode(ir::OpCode::PUSH_INT);
+    emit_int(1);
+    emit_opcode(ir::OpCode::ADD);
+    emit_opcode(ir::OpCode::STORE_VAR);
+    emit_byte(get_var_slot(node.lvalue->name));
+    // Push result for expression consistency
+    emit_opcode(ir::OpCode::LOAD_VAR);
+    emit_byte(get_var_slot(node.lvalue->name));
+}
+
+void IRGenerator::visit(const parser::DecrementExpression &node) {
+    emit_opcode(ir::OpCode::LOAD_VAR);
+    emit_byte(get_var_slot(node.lvalue->name));
+    emit_opcode(ir::OpCode::PUSH_INT);
+    emit_int(1);
+    emit_opcode(ir::OpCode::SUB);
+    emit_opcode(ir::OpCode::STORE_VAR);
+    emit_byte(get_var_slot(node.lvalue->name));
+    // Push result for expression consistency
+    emit_opcode(ir::OpCode::LOAD_VAR);
+    emit_byte(get_var_slot(node.lvalue->name));
+}
+
+void IRGenerator::visit(const parser::AwaitExpression &node) {
+    node.expr->accept(*this);
+    emit_opcode(ir::OpCode::AWAIT);
+}
+
+void IRGenerator::visit(const parser::SpawnExpression &node) {
+    // Push arguments
+    for (const auto &arg : node.call->args) {
+        arg->accept(*this);
+    }
+    emit_opcode(ir::OpCode::SPAWN);
+    emit_uint32((uint32_t)m_program.functions.at(node.call->name).entry_addr);
+}
+
+void IRGenerator::visit(const parser::BinaryExpression &node) {
+    node.left->accept(*this);
+    node.right->accept(*this);
+    switch (node.op) {
+        case parser::BinaryExpression::Op::Add:
+            emit_opcode(ir::OpCode::ADD);
+            break;
+        case parser::BinaryExpression::Op::Sub:
+            emit_opcode(ir::OpCode::SUB);
+            break;
+        case parser::BinaryExpression::Op::Mul:
+            emit_opcode(ir::OpCode::MUL);
+            break;
+        case parser::BinaryExpression::Op::Div:
+            emit_opcode(ir::OpCode::DIV);
+            break;
+        case parser::BinaryExpression::Op::Leq:
+            emit_opcode(ir::OpCode::CMP_LE);
+            break;
+        case parser::BinaryExpression::Op::Less:
+            emit_opcode(ir::OpCode::CMP_LT);
+            break;
+        case parser::BinaryExpression::Op::Eq:
+            emit_opcode(ir::OpCode::CMP_EQ);
+            break;
+        case parser::BinaryExpression::Op::Gt:
+            emit_opcode(ir::OpCode::CMP_GT);
+            break;
+        case parser::BinaryExpression::Op::Geq:
+            emit_opcode(ir::OpCode::CMP_GE);
+            break;
+        default:
+            throw std::runtime_error("Unsupported binary op in refactored IR Gen");
+    }
+}
+
+void IRGenerator::visit(const parser::StringLiteral &node) {
+    emit_opcode(ir::OpCode::PUSH_STR);
+    emit_uint32(get_string_id(node.value));
+}
+
+void IRGenerator::visit(const parser::FunctionCall &node) {
+    for (const auto &arg : node.args) {
+        arg->accept(*this);
+    }
+    if (node.name == "write") {
+        emit_opcode(ir::OpCode::SYS_WRITE);
+    } else if (node.name == "printf") {
+        emit_opcode(ir::OpCode::SYS_PRINTF);
+        emit_byte((uint8_t)node.args.size());
+    } else {
+        emit_opcode(ir::OpCode::CALL);
+        emit_uint32((uint32_t)m_program.functions.at(node.name).entry_addr);
     }
 }
 
