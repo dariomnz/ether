@@ -38,6 +38,8 @@ bool Parser::match(lexer::TokenType type) {
 DataType Parser::parse_type() {
     if (match(lexer::TokenType::Int)) return DataType(DataType::Kind::Int);
     if (match(lexer::TokenType::Coroutine)) return DataType(DataType::Kind::Coroutine);
+    if (match(lexer::TokenType::Ptr)) return DataType(DataType::Kind::Ptr);
+    if (match(lexer::TokenType::Void)) return DataType(DataType::Kind::Void);
     const auto &err_token = peek();
     throw CompilerError("Expected type", m_filename, err_token.line, err_token.column, (int)err_token.lexeme.size());
 }
@@ -109,8 +111,13 @@ std::unique_ptr<Function> Parser::parse_function() {
     }
 
     std::vector<Parameter> params;
+    bool is_variadic = false;
     if (!check(lexer::TokenType::RParent)) {
         do {
+            if (match(lexer::TokenType::Ellipsis)) {
+                is_variadic = true;
+                break;
+            }
             DataType param_type = parse_type();
             if (!check(lexer::TokenType::Identifier)) {
                 const auto &token = peek();
@@ -128,7 +135,7 @@ std::unique_ptr<Function> Parser::parse_function() {
 
     auto body = parse_block();
     return std::make_unique<Function>(return_type, std::string(name), name_token.line, name_token.column,
-                                      std::move(params), std::move(body), m_filename, start_token.line,
+                                      std::move(params), is_variadic, std::move(body), m_filename, start_token.line,
                                       start_token.column);
 }
 
@@ -207,7 +214,8 @@ std::unique_ptr<Statement> Parser::parse_statement() {
         return std::make_unique<ReturnStatement>(std::move(expr), m_filename, start_token.line, start_token.column);
     }
 
-    if (check(lexer::TokenType::Int) || check(lexer::TokenType::Coroutine)) {
+    if (check(lexer::TokenType::Int) || check(lexer::TokenType::Coroutine) || check(lexer::TokenType::Ptr) ||
+        check(lexer::TokenType::Void)) {
         DataType type = parse_type();
         if (!check(lexer::TokenType::Identifier)) {
             const auto &token = peek();
@@ -388,7 +396,12 @@ std::unique_ptr<Expression> Parser::parse_primary() {
             std::vector<std::unique_ptr<Expression>> args;
             if (!check(lexer::TokenType::RParent)) {
                 do {
-                    args.push_back(parse_expression());
+                    if (match(lexer::TokenType::Ellipsis)) {
+                        args.push_back(std::make_unique<VarargExpression>(m_filename, m_tokens[m_pos - 1].line,
+                                                                          m_tokens[m_pos - 1].column));
+                    } else {
+                        args.push_back(parse_expression());
+                    }
                 } while (match(lexer::TokenType::Comma));
             }
             if (!match(lexer::TokenType::RParent)) {

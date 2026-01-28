@@ -19,7 +19,6 @@
 #include "test_runner/test_runner.hpp"
 #include "vm/vm.hpp"
 
-
 using Clock = std::chrono::high_resolution_clock;
 
 void report_error(const std::string &main_filename, const std::string &main_source, const ether::CompilerError &e) {
@@ -151,7 +150,7 @@ void disassemble(const ether::ir::IRProgram &program) {
                 std::cout << "slot " << (int)slot;
                 break;
             }
-            case ether::ir::OpCode::SYS_PRINTF: {
+            case ether::ir::OpCode::SYSCALL: {
                 uint8_t num_args = code[ip++];
                 std::cout << "args " << (int)num_args;
                 break;
@@ -160,14 +159,16 @@ void disassemble(const ether::ir::IRProgram &program) {
             case ether::ir::OpCode::SPAWN: {
                 uint32_t target = *(uint32_t *)&code[ip];
                 ip += 4;
-                std::cout << "addr " << target;
+                uint8_t num_args = code[ip++];
+                std::cout << "addr " << target << " args " << (int)num_args;
                 if (addr_to_func.contains(target)) {
                     std::cout << " <" << addr_to_func.at(target).first << ">";
                 }
                 break;
             }
             case ether::ir::OpCode::YIELD:
-            case ether::ir::OpCode::AWAIT: {
+            case ether::ir::OpCode::AWAIT:
+            case ether::ir::OpCode::PUSH_VARARGS: {
                 break;
             }
             case ether::ir::OpCode::JMP:

@@ -254,8 +254,9 @@ struct NodeFinder : public ASTVisitor {
             ss << "(function) " << type_to_string(node.return_type) << " " << node.name << "(";
             for (size_t i = 0; i < node.params.size(); ++i) {
                 ss << type_to_string(node.params[i].type) << " " << node.params[i].name;
-                if (i < node.params.size() - 1) ss << ", ";
+                if (i < node.params.size() - 1 || node.is_variadic) ss << ", ";
             }
+            if (node.is_variadic) ss << "...";
             ss << ")";
             hover_info = ss.str();
             return;
@@ -297,11 +298,19 @@ struct NodeFinder : public ASTVisitor {
             def_line = node.decl_line;
             def_col = node.decl_col;
             def_size = (int)node.name.size();
+            std::stringstream ss;
+            ss << "(call) ";
             if (node.type) {
-                hover_info = "(call) " + node.name + " -> " + type_to_string(*node.type);
-            } else {
-                hover_info = "(call) " + node.name;
+                ss << type_to_string(*node.type) << " ";
             }
+            ss << node.name << "(";
+            for (size_t i = 0; i < node.param_types.size(); ++i) {
+                ss << type_to_string(node.param_types[i]);
+                if (i < node.param_types.size() - 1 || node.is_variadic) ss << ", ";
+            }
+            if (node.is_variadic) ss << "...";
+            ss << ")";
+            hover_info = ss.str();
             return;
         }
         for (auto& a : node.args) {

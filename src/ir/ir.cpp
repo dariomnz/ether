@@ -34,20 +34,8 @@ std::ostream &operator<<(std::ostream &os, OpCode op) {
         case OpCode::PUSH_STR:
             os << "PUSH_STR";
             break;
-        case OpCode::SYS_OPEN:
-            os << "SYS_OPEN";
-            break;
-        case OpCode::SYS_READ:
-            os << "SYS_READ";
-            break;
-        case OpCode::SYS_WRITE:
-            os << "SYS_WRITE";
-            break;
-        case OpCode::SYS_CLOSE:
-            os << "SYS_CLOSE";
-            break;
-        case OpCode::SYS_PRINTF:
-            os << "SYS_PRINTF";
+        case OpCode::SYSCALL:
+            os << "SYSCALL";
             break;
         case OpCode::CALL:
             os << "CALL";
@@ -84,6 +72,12 @@ std::ostream &operator<<(std::ostream &os, OpCode op) {
             break;
         case OpCode::POP:
             os << "POP";
+            break;
+        case OpCode::PUSH_VARARGS:
+            os << "PUSH_VARARGS";
+            break;
+        case OpCode::SYS_PRINTF:
+            os << "SYS_PRINTF";
             break;
         case OpCode::HELPERS:
             os << "HELPERS";

@@ -16,6 +16,7 @@
 // EXPECTED_OUTPUT: Worker 4: loop 3
 // EXPECTED_OUTPUT: Worker 5: loop 4
 // EXPECTED_RESULT: 0
+#include "std/io.eth"
 
 int worker(int id, int count) {
     for (int i = 0; i < count; i++) {

@@ -8,16 +8,7 @@ using namespace parser;
 
 void Analyzer::analyze(Program &program) {
     // Register built-ins
-    m_functions["printf"] = {DataType(DataType::Kind::Int), {}, "", 0, 0};
-    m_functions["malloc"] = {DataType(DataType::Kind::Ptr), {DataType(DataType::Kind::Int)}, "", 0, 0};
-    m_functions["free"] = {DataType(DataType::Kind::Int), {DataType(DataType::Kind::Ptr)}, "", 0, 0};
-    m_functions["syscall"] = {
-        DataType(DataType::Kind::Int),
-        {DataType(DataType::Kind::Int), DataType(DataType::Kind::Int), DataType(DataType::Kind::Int),
-         DataType(DataType::Kind::Int), DataType(DataType::Kind::Int)},
-        "",
-        0,
-        0};
+    m_functions["syscall"] = {DataType(DataType::Kind::Int), {}, true, "", 0, 0};
 
     // First pass: collect function signatures
     for (const auto &func : program.functions) {
@@ -25,7 +16,8 @@ void Analyzer::analyze(Program &program) {
         for (const auto &param : func->params) {
             param_types.push_back(param.type);
         }
-        m_functions[func->name] = {func->return_type, param_types, func->filename, func->line, func->column};
+        m_functions[func->name] = {func->return_type, param_types, func->is_variadic,
+                                   func->filename,    func->line,  func->column};
     }
 
     // Second pass: analyze everything
@@ -62,7 +54,11 @@ void Analyzer::visit(VariableDeclaration &node) {
         node.init->accept(*this);
         DataType init_type = m_current_type;
         if (!(init_type == node.type)) {
-            throw CompilerError("Type mismatch in variable declaration", node.filename, node.line, node.column);
+            // Allow assigning 0 to pointers
+            bool is_null_ptr = (node.type.kind == DataType::Kind::Ptr && init_type.kind == DataType::Kind::Int);
+            if (!is_null_ptr) {
+                throw CompilerError("Type mismatch in variable declaration", node.filename, node.line, node.column);
+            }
         }
     }
     define_variable(node.name, node.type, node.filename, node.line, node.column);
@@ -118,8 +114,12 @@ void Analyzer::visit(BinaryExpression &node) {
     node.right->accept(*this);
     DataType right = m_current_type;
 
-    if (!(left == DataType(DataType::Kind::Int)) || !(right == DataType(DataType::Kind::Int))) {
-        throw CompilerError("Binary operations are only supported for integers", node.filename, node.line, node.column);
+    bool left_ok = left.kind == DataType::Kind::Int || left.kind == DataType::Kind::Ptr;
+    bool right_ok = right.kind == DataType::Kind::Int || right.kind == DataType::Kind::Ptr;
+
+    if (!left_ok || !right_ok) {
+        throw CompilerError("Binary operations are only supported for integers and pointers", node.filename, node.line,
+                            node.column);
     }
     m_current_type = DataType(DataType::Kind::Int);
     node.type = std::make_unique<DataType>(m_current_type);
@@ -131,18 +131,33 @@ void Analyzer::visit(FunctionCall &node) {
                             (int)node.name.size());
     }
     const auto &info = m_functions[node.name];
-    if (node.name != "printf" && node.args.size() != info.param_types.size()) {
-        throw CompilerError("Wrong number of arguments for " + node.name, node.filename, node.line, node.column,
-                            (int)node.name.size());
+    if (info.is_variadic) {
+        if (node.args.size() < info.param_types.size()) {
+            throw CompilerError("Too few arguments for variadic function " + node.name, node.filename, node.line,
+                                node.column, (int)node.name.size());
+        }
+    } else {
+        if (node.args.size() != info.param_types.size()) {
+            throw CompilerError("Wrong number of arguments for " + node.name, node.filename, node.line, node.column,
+                                (int)node.name.size());
+        }
     }
     node.decl_filename = info.filename;
     node.decl_line = info.line;
     node.decl_col = info.col;
+    node.param_types = info.param_types;
+    node.is_variadic = info.is_variadic;
     for (size_t i = 0; i < node.args.size(); ++i) {
         node.args[i]->accept(*this);
     }
     m_current_type = info.return_type;
     node.type = std::make_unique<DataType>(m_current_type);
+}
+
+void Analyzer::visit(VarargExpression &node) {
+    // ellipsis can only appear in calls, and their type is effectively "multiple"
+    // for now we just mark current type as int so it doesn't crash
+    m_current_type = DataType(DataType::Kind::Int);
 }
 
 void Analyzer::visit(SpawnExpression &node) {

@@ -2,7 +2,6 @@
 #define ETHER_TOKEN_HPP
 
 #include <string>
-#include <string_view>
 
 namespace ether::lexer {
 
@@ -19,6 +18,8 @@ enum class TokenType {
     Spawn,
     Yield,
     Await,
+    Ptr,
+    Void,
 
     // Identifiers and Literals
     Identifier,
@@ -44,6 +45,7 @@ enum class TokenType {
     RBrace,
     Semicolon,
     Comma,
+    Ellipsis,
 
     // special
     EOF_TOKEN,

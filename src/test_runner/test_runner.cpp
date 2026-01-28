@@ -47,6 +47,10 @@ bool run_test(const std::string& ether_bin, const TestCase& tc) {
     std::cout << "Running test: " << tc.path.relative_path() << "... " << std::flush;
     auto start = std::chrono::high_resolution_clock::now();
     try {
+        if (tc.expected_outputs.empty() && tc.not_expected_outputs.empty() && !tc.expected_result.has_value()) {
+            std::cout << "\033[33mNOTHING TO TEST\033[0m" << std::endl;
+            return false;
+        }
         // Use 'timeout 1s' to prevent hanging
         std::string cmd = "timeout 1s " + ether_bin + " " + tc.path.string() + " " + tc.args + " 2>&1";
         ExecResult res = exec(cmd);

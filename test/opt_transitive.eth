@@ -3,6 +3,7 @@
 // EXPECTED_OUTPUT: <function: middle>
 // EXPECTED_OUTPUT: <function: main>
 // NOT_EXPECTED_OUTPUT: <function: unused>
+#include "std/io.eth"
 
 int leaf() { return 1; }
 int middle() { return leaf(); }

@@ -17,6 +17,7 @@ class Analyzer : public parser::ASTVisitor {
     void visit(parser::StringLiteral &node) override;
     void visit(parser::VariableExpression &node) override;
     void visit(parser::FunctionCall &node) override;
+    void visit(parser::VarargExpression &node) override;
     void visit(parser::BinaryExpression &node) override;
     void visit(parser::Block &node) override;
     void visit(parser::IfStatement &node) override;
@@ -48,6 +49,7 @@ class Analyzer : public parser::ASTVisitor {
     struct FunctionInfo {
         parser::DataType return_type;
         std::vector<parser::DataType> param_types;
+        bool is_variadic;
         std::string filename;
         int line;
         int col;

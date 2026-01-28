@@ -8,14 +8,14 @@
 
 #include "common/error.hpp"
 
-
 namespace ether::lexer {
 
 static const std::unordered_map<std::string_view, TokenType> keywords = {
-    {"int", TokenType::Int},     {"return", TokenType::Return},      {"if", TokenType::If},
-    {"else", TokenType::Else},   {"while", TokenType::While},        {"for", TokenType::For},
-    {"string", TokenType::Int},  {"spawn", TokenType::Spawn},        {"yield", TokenType::Yield},
-    {"await", TokenType::Await}, {"coroutine", TokenType::Coroutine}};
+    {"int", TokenType::Int},     {"return", TokenType::Return},       {"if", TokenType::If},
+    {"else", TokenType::Else},   {"while", TokenType::While},         {"for", TokenType::For},
+    {"string", TokenType::Int},  {"spawn", TokenType::Spawn},         {"yield", TokenType::Yield},
+    {"await", TokenType::Await}, {"coroutine", TokenType::Coroutine}, {"ptr", TokenType::Ptr},
+    {"void", TokenType::Void}};
 
 Lexer::Lexer(std::string_view source, std::string filename) : m_source(source), m_filename(std::move(filename)) {}
 
@@ -83,7 +83,8 @@ Token Lexer::next_token() {
         std::string lexeme(m_source.substr(start_pos, m_pos - start_pos));
 
         if (keywords.contains(lexeme)) {
-            return {keywords.at(lexeme), lexeme, start_line, start_col};
+            TokenType type = keywords.at(lexeme);
+            return {type, lexeme, start_line, start_col};
         }
         return {TokenType::Identifier, lexeme, start_line, start_col};
     }
@@ -160,6 +161,18 @@ Token Lexer::next_token() {
             return {TokenType::Semicolon, lexeme, start_line, start_col};
         case ',':
             return {TokenType::Comma, lexeme, start_line, start_col};
+        case '.': {
+            if (peek() == '.') {
+                advance();
+                if (peek() == '.') {
+                    advance();
+                    return {TokenType::Ellipsis, "...", start_line, start_col};
+                }
+                // If it's only two dots, we could error or return unknown.
+                // For now, let's treat it as unknown or just continue.
+            }
+            return {TokenType::Unknown, ".", start_line, start_col};
+        }
         case '(':
             return {TokenType::LParent, lexeme, start_line, start_col};
         case ')':

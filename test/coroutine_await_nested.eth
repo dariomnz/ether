@@ -34,6 +34,8 @@
 // EXPECTED_OUTPUT: Worker 2 result: 1
 // EXPECTED_RESULT: 11
 
+#include "std/io.eth"
+
 int worker2(int id, int count) {
     int sum = 0;
     for (int i = 0; i < count; i++) {

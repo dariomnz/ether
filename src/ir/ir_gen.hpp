@@ -1,8 +1,6 @@
 #ifndef ETHER_IR_GEN_HPP
 #define ETHER_IR_GEN_HPP
 
-#include <memory>
-#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -20,6 +18,7 @@ class IRGenerator : public parser::ASTVisitor {
     void visit(const parser::StringLiteral &node) override;
     void visit(const parser::VariableExpression &node) override;
     void visit(const parser::FunctionCall &node) override;
+    void visit(const parser::VarargExpression &node) override;
     void visit(const parser::BinaryExpression &node) override;
     void visit(const parser::Block &node) override;
     void visit(const parser::IfStatement &node) override;

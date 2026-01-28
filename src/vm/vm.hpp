@@ -51,6 +51,8 @@ struct OpCodeStats {
 struct CallFrame {
     size_t return_addr;
     size_t stack_base;  // offset in m_stack where locals start
+    uint8_t num_fixed_params;
+    uint8_t num_args_passed;
 };
 
 struct Coroutine {
@@ -83,7 +85,7 @@ class VM {
     struct io_uring ring_;
 
     void handle_io_completion();
-    void submit_syscall(Coroutine& coro);
+    void submit_syscall(Coroutine& coro, uint8_t num_args);
 
     inline void push(Value val) { m_coroutines[m_current_coro].stack.push_back(val); }
     inline Value pop() {

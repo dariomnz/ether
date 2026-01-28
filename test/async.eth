@@ -1,10 +1,12 @@
-// Async I/O Test
+// EXPECTED_OUTPUT: Writing to terminal async...
+// EXPECTED_OUTPUT: Hello from io_uring!
+// EXPECTED_OUTPUT: Bytes written: 21
 
 #include "std/io.eth"
 
 int main() {
     printf("Writing to terminal async...\n");
-    int written = await write(1, "Hello from io_uring!\n", 21);
+    int written = await co_write(1, "Hello from io_uring!\n", 21);
     printf("Bytes written: %d\n", written);
     return 0;
 }

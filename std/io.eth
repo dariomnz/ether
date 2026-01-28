@@ -1,15 +1,43 @@
-coroutine open(string path, int flags, int mode) {
+int open(string path, int flags, int mode) {
+    return syscall(0, 0, path, flags, mode);
+}
+
+int read(int fd, int buf, int size) {
+    return syscall(1, fd, buf, size, 0);
+}
+
+int write(int fd, string buf, int size) {
+    return syscall(2, fd, buf, size, 0);
+}
+
+int close(int fd) {
+    return syscall(3, fd);
+}
+
+coroutine co_open(string path, int flags, int mode) {
     return spawn syscall(0, 0, path, flags, mode);
 }
 
-coroutine read(int fd, string buf, int size) {
+coroutine co_read(int fd, int buf, int size) {
     return spawn syscall(1, fd, buf, size, 0);
 }
 
-coroutine write(int fd, string buf, int size) {
+coroutine co_write(int fd, string buf, int size) {
     return spawn syscall(2, fd, buf, size, 0);
 }
 
-coroutine close(int fd) {
-    return spawn syscall(3, fd, 0, 0, 0);
+coroutine co_close(int fd) {
+    return spawn syscall(3, fd);
+}
+
+int printf(string fmt, ...) {
+    return syscall(10, fmt, ...);
+}
+
+ptr malloc(int size) {
+    return syscall(11, size);
+}
+
+int free(ptr p) {
+    return syscall(12, p);
 }

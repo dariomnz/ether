@@ -6,7 +6,6 @@
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
-#include <string>
 
 #include "common/debug.hpp"
 #include "common/defer.hpp"
@@ -18,7 +17,7 @@ VM::VM(const ir::IRProgram &program) : program_(program) {
     Coroutine main_coro;
     main_coro.id = 0;  // Main is always ID 0
     main_coro.ip = program.main_addr;
-    main_coro.call_stack.push_back({0, 0});
+    main_coro.call_stack.push_back({0, 0, 0, 0});
 
     // Pre-allocate slots for main
     auto main_it = program.functions.find("main");
@@ -101,7 +100,7 @@ Value VM::run(bool collect_stats) {
         bool yielded = false;
         while (!yielded) {
             if (CUR_CORO().ip == 0xFFFFFFFF) {
-                submit_syscall(CUR_CORO());
+                submit_syscall(CUR_CORO(), CUR_CORO().call_stack.back().num_args_passed);
                 // After syscall completion, it should return/finish if it was spawned.
                 // But wait, submit_syscall only starts it.
                 // When completion happens, we want it to RET.
@@ -178,40 +177,41 @@ Value VM::run(bool collect_stats) {
                     break;
                 }
 
-                case ir::OpCode::SYS_WRITE: {
-                    Value val = pop();
-                    int32_t fd = pop().as.i32;
-                    std::string s;
-                    if (val.type == ValueType::Int) {
-                        s = std::to_string(val.as.i32);
-                    } else {
-                        s = val.as_string();
+                case ir::OpCode::SYSCALL: {
+                    uint8_t ir_num_args = READ_BYTE();
+                    uint8_t num_args_passed = ir_num_args;
+                    if (ir_num_args & 0x80) {
+                        uint8_t fixed = (ir_num_args & 0x7F) - 1;
+                        auto &frame = CUR_CORO().call_stack.back();
+                        uint8_t num_varargs = frame.num_args_passed - frame.num_fixed_params;
+                        num_args_passed = fixed + num_varargs;
                     }
-                    if (fd == 1) {
-                        write(1, s.data(), s.size());
-                        push(Value((int32_t)s.size()));
-                    } else {
-                        push(Value(-1));
-                    }
+                    submit_syscall(CUR_CORO(), num_args_passed);
+                    yielded = true;
                     break;
                 }
 
                 case ir::OpCode::CALL: {
                     uint32_t target_addr = READ_UINT32();
-                    if (target_addr == 0xFFFFFFFF) {
-                        submit_syscall(CUR_CORO());
-                        yielded = true;
-                        break;
+                    uint8_t ir_num_args = READ_BYTE();
+                    uint8_t num_args_passed = ir_num_args;
+                    if (ir_num_args & 0x80) {
+                        uint8_t fixed = (ir_num_args & 0x7F) - 1;
+                        auto &frame = CUR_CORO().call_stack.back();
+                        uint8_t num_varargs = frame.num_args_passed - frame.num_fixed_params;
+                        num_args_passed = fixed + num_varargs;
                     }
+
                     const auto &info = program.addr_to_info.at(target_addr);
                     uint8_t num_params = info.num_params;
                     uint8_t num_slots = info.num_slots;
 
                     auto &stack = CUR_CORO().stack;
                     auto &call_stack = CUR_CORO().call_stack;
-                    size_t base = stack.size() - num_params;
-                    call_stack.push_back({CUR_CORO().ip, base});
-                    if (num_slots > num_params) {
+                    size_t base = stack.size() - num_args_passed;
+                    call_stack.push_back({CUR_CORO().ip, base, num_params, num_args_passed});
+
+                    if (num_slots > num_args_passed) {
                         stack.resize(base + num_slots);
                     }
                     CUR_CORO().ip = target_addr;
@@ -289,61 +289,22 @@ Value VM::run(bool collect_stats) {
                     break;
                 }
 
-                case ir::OpCode::SYS_PRINTF: {
-                    uint8_t num_args = READ_BYTE();
-                    std::vector<Value> args(num_args);
-                    for (int i = num_args - 1; i >= 0; --i) {
-                        args[i] = pop();
-                    }
-
-                    if (args.empty() || args[0].type != ValueType::String) {
-                        throw std::runtime_error("printf requires at least a format string argument");
-                    }
-
-                    std::string_view fmt = args[0].as_string();
-                    size_t arg_idx = 1;
-                    for (size_t i = 0; i < fmt.size(); ++i) {
-                        if (fmt[i] == '%' && i + 1 < fmt.size()) {
-                            i++;
-                            if (fmt[i] == 'd') {
-                                if (arg_idx < args.size() && args[arg_idx].type == ValueType::Int) {
-                                    std::cout << args[arg_idx++].as.i32;
-                                } else {
-                                    std::cout << "%d";
-                                }
-                            } else if (fmt[i] == 's') {
-                                if (arg_idx < args.size() && args[arg_idx].type == ValueType::String) {
-                                    std::cout << args[arg_idx++].as_string();
-                                } else {
-                                    std::cout << "%s";
-                                }
-                            } else {
-                                std::cout << '%' << fmt[i];
-                            }
-                        } else if (fmt[i] == '\\' && i + 1 < fmt.size()) {
-                            i++;
-                            if (fmt[i] == 'n')
-                                std::cout << '\n';
-                            else if (fmt[i] == 't')
-                                std::cout << '\t';
-                            else
-                                std::cout << '\\' << fmt[i];
-                        } else {
-                            std::cout << fmt[i];
-                        }
-                    }
-                    push(Value(0));
-                    break;
-                }
-
                 case ir::OpCode::SPAWN: {
                     uint32_t target_addr = READ_UINT32();
+                    uint8_t ir_num_args = READ_BYTE();
+                    uint8_t num_args_passed = ir_num_args;
+                    if (ir_num_args & 0x80) {
+                        uint8_t fixed = (ir_num_args & 0x7F) - 1;
+                        auto &frame = CUR_CORO().call_stack.back();
+                        uint8_t num_varargs = frame.num_args_passed - frame.num_fixed_params;
+                        num_args_passed = fixed + num_varargs;
+                    }
                     uint8_t num_params;
                     uint8_t num_slots;
 
                     if (target_addr == 0xFFFFFFFF) {
-                        num_params = 5;
-                        num_slots = 5;
+                        num_params = num_args_passed;
+                        num_slots = num_args_passed;
                     } else {
                         const auto &info = program.addr_to_info.at(target_addr);
                         num_params = info.num_params;
@@ -354,15 +315,15 @@ Value VM::run(bool collect_stats) {
                     uint32_t new_id = m_next_coro_id++;
                     new_coro.id = new_id;
                     new_coro.ip = target_addr;
-                    new_coro.call_stack.push_back({0, 0});
+                    new_coro.call_stack.push_back({0, 0, num_params, num_args_passed});
 
-                    new_coro.stack.resize(num_params);
+                    new_coro.stack.resize(num_args_passed);
                     auto &stack = CUR_CORO().stack;
-                    for (int i = num_params - 1; i >= 0; --i) {
+                    for (int i = num_args_passed - 1; i >= 0; --i) {
                         new_coro.stack[i] = stack.back();
                         stack.pop_back();
                     }
-                    if (num_slots > num_params) {
+                    if (num_slots > num_args_passed) {
                         new_coro.stack.resize(num_slots);
                     }
 
@@ -399,21 +360,12 @@ Value VM::run(bool collect_stats) {
                     yielded = true;
                     break;
 
-                case ir::OpCode::HELPERS: {
-                    uint8_t helper_id = READ_BYTE();
-                    if (helper_id == 0) {  // MALLOC
-                        int32_t size = pop().as.i32;
-                        void *ptr = malloc(size);
-                        Value res;
-                        res.type = ValueType::Ptr;
-                        res.as.ptr = ptr;
-                        push(res);
-                    } else if (helper_id == 1) {  // FREE
-                        Value ptr_val = pop();
-                        if (ptr_val.type == ValueType::Ptr) {
-                            free(ptr_val.as.ptr);
-                        }
-                        push(Value(0));
+                case ir::OpCode::PUSH_VARARGS: {
+                    auto &frame = CUR_CORO().call_stack.back();
+                    auto &stack = CUR_CORO().stack;
+                    uint8_t num_varargs = frame.num_args_passed - frame.num_fixed_params;
+                    for (uint8_t i = 0; i < num_varargs; ++i) {
+                        stack.push_back(stack[frame.stack_base + frame.num_fixed_params + i]);
                     }
                     break;
                 }
@@ -459,62 +411,128 @@ void VM::handle_io_completion() {
     }
 }
 
-void VM::submit_syscall(Coroutine &coro) {
+void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
     auto &stack = coro.stack;
-    if (stack.size() < 5) {
-        coro.stack.push_back(Value(-3));  // Stack error
-        coro.finished = true;
+    std::vector<Value> args(num_args);
+    for (int i = num_args - 1; i >= 0; --i) {
+        args[i] = stack.back();
+        stack.pop_back();
+    }
+
+    if (args.empty()) {
+        coro.stack.push_back(Value(-1));
         return;
     }
 
-    int32_t p4 = stack.back().as.i32;
-    stack.pop_back();
-    int32_t p3 = stack.back().as.i32;
-    stack.pop_back();
+    int32_t id = args[0].as.i32;
 
-    Value p2_val = stack.back();
-    const char *p2_str = nullptr;
-    int32_t p2_int = 0;
-    if (p2_val.type == ValueType::String) {
-        p2_str = p2_val.as.str;
-    } else if (p2_val.type == ValueType::Ptr) {
-        p2_str = (const char *)p2_val.as.ptr;
-    } else {
-        p2_int = p2_val.as.i32;
+    switch (id) {
+        case 10: {  // PRINTF
+            if (args.size() < 2 || args[1].type != ValueType::String) {
+                throw std::runtime_error("printf requires at least a format string argument");
+            }
+
+            std::string_view fmt = args[1].as_string();
+            size_t arg_idx = 2;
+            for (size_t i = 0; i < fmt.size(); ++i) {
+                if (fmt[i] == '%' && i + 1 < fmt.size()) {
+                    i++;
+                    if (fmt[i] == 'd') {
+                        if (arg_idx < args.size() && args[arg_idx].type == ValueType::Int) {
+                            std::cout << args[arg_idx++].as.i32;
+                        } else {
+                            std::cout << "%d";
+                        }
+                    } else if (fmt[i] == 's') {
+                        if (arg_idx < args.size() && args[arg_idx].type == ValueType::String) {
+                            std::cout << args[arg_idx++].as_string();
+                        } else {
+                            std::cout << "%s";
+                        }
+                    } else if (fmt[i] == 'p') {
+                        if (arg_idx < args.size() && args[arg_idx].type == ValueType::Ptr) {
+                            std::cout << args[arg_idx++].as.ptr;
+                        } else {
+                            std::cout << "%p";
+                        }
+                    } else {
+                        std::cout << '%' << fmt[i];
+                    }
+                } else if (fmt[i] == '\\' && i + 1 < fmt.size()) {
+                    i++;
+                    if (fmt[i] == 'n')
+                        std::cout << '\n';
+                    else if (fmt[i] == 't')
+                        std::cout << '\t';
+                    else
+                        std::cout << '\\' << fmt[i];
+                } else {
+                    std::cout << fmt[i];
+                }
+            }
+            coro.stack.push_back(Value(0));
+            return;
+        }
+
+        case 11: {  // MALLOC
+            int32_t size = args[1].as.i32;
+            void *ptr = malloc(size);
+            Value res;
+            res.type = ValueType::Ptr;
+            res.as.ptr = ptr;
+            coro.stack.push_back(res);
+            return;
+        }
+
+        case 12: {  // FREE
+            Value ptr_val = args[1];
+            if (ptr_val.type == ValueType::Ptr) {
+                free(ptr_val.as.ptr);
+            }
+            coro.stack.push_back(Value(0));
+            return;
+        }
+
+        default:
+            break;  // Continue to async syscalls
     }
-    stack.pop_back();
 
-    int32_t p1 = stack.back().as.i32;
-    stack.pop_back();
-    int32_t id = stack.back().as.i32;
-    stack.pop_back();
-
+    // Async I/O syscalls
     struct io_uring_sqe *sqe = io_uring_get_sqe(&ring_);
     if (!sqe) {
-        coro.stack.push_back(Value(-1));  // Error
+        coro.stack.push_back(Value(-1));
         return;
     }
 
     switch (id) {
-        case 0:  // OPEN
-            io_uring_prep_openat(sqe, AT_FDCWD, p2_str, p3, p4);
+        case 0: {  // OPEN
+            const char *path = args[2].as.str;
+            int flags = args[3].as.i32;
+            int mode = args[4].as.i32;
+            io_uring_prep_openat(sqe, AT_FDCWD, path, flags, mode);
             break;
-        case 1:  // READ
-            io_uring_prep_read(sqe, p1, (void *)p2_str, p3, p4);
+        }
+        case 1: {  // READ
+            int fd = args[1].as.i32;
+            void *buf = args[2].as.ptr;
+            int size = args[3].as.i32;
+            io_uring_prep_read(sqe, fd, buf, size, 0);
             break;
-        case 2:  // WRITE
-            if (p2_str) {
-                io_uring_prep_write(sqe, p1, p2_str, p3, p4);
-            } else {
-                // Handle int to string conversion if needed, but for now assume string
-                io_uring_prep_write(sqe, p1, &p2_int, sizeof(p2_int), p4);
-            }
+        }
+        case 2: {  // WRITE
+            int fd = args[1].as.i32;
+            const char *buf = (args[2].type == ValueType::String) ? args[2].as.str : (const char *)args[2].as.ptr;
+            int size = args[3].as.i32;
+            io_uring_prep_write(sqe, fd, buf, size, 0);
             break;
-        case 3:  // CLOSE
-            io_uring_prep_close(sqe, p1);
+        }
+        case 3: {  // CLOSE
+            int fd = args[1].as.i32;
+            io_uring_prep_close(sqe, fd);
             break;
+        }
         default:
-            coro.stack.push_back(Value(-2));  // Unknown syscall
+            coro.stack.push_back(Value(-2));
             return;
     }
 

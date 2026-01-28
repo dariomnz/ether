@@ -1,0 +1,12 @@
+// EXPECTED_OUTPUT: Log: Hello 42
+#include "std/io.eth"
+
+void my_log(string fmt, ...) {
+    printf("Log: ");
+    printf(fmt, ...);
+}
+
+int main() {
+    my_log("Hello %d\n", 42);
+    return 0;
+}

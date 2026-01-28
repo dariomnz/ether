@@ -13,7 +13,7 @@ struct DependencyTracker : public parser::ASTVisitor {
     DependencyTracker(const std::unordered_map<std::string, const parser::Function *> &funcs) : all_funcs(funcs) {}
 
     void trace(const std::string &name) {
-        if (name == "printf" || name == "malloc" || name == "free" || name == "syscall") return;
+        if (name == "syscall") return;
         if (reachable.contains(name)) return;
         reachable.insert(name);
         auto it = all_funcs.find(name);
@@ -29,6 +29,7 @@ struct DependencyTracker : public parser::ASTVisitor {
         trace(node.name);
         for (const auto &arg : node.args) arg->accept(*this);
     }
+    void visit(const parser::VarargExpression &) override {}
     void visit(const parser::BinaryExpression &node) override {
         if (node.left) node.left->accept(*this);
         if (node.right) node.right->accept(*this);
@@ -307,6 +308,11 @@ void IRGenerator::visit(const parser::SpawnExpression &node) {
         m_call_patches.push_back({m_program.bytecode.size(), node.call->name});
         emit_uint32(0);
     }
+    uint8_t num_args = (uint8_t)node.call->args.size();
+    if (!node.call->args.empty() && dynamic_cast<const parser::VarargExpression *>(node.call->args.back().get())) {
+        num_args |= 0x80;
+    }
+    emit_byte(num_args);
 }
 
 void IRGenerator::visit(const parser::BinaryExpression &node) {
@@ -354,24 +360,22 @@ void IRGenerator::visit(const parser::FunctionCall &node) {
     for (const auto &arg : node.args) {
         arg->accept(*this);
     }
-    if (node.name == "printf") {
-        emit_opcode(ir::OpCode::SYS_PRINTF);
-        emit_byte((uint8_t)node.args.size());
-    } else if (node.name == "malloc") {
-        emit_opcode(ir::OpCode::HELPERS);
-        emit_byte(0);  // MALLOC
-    } else if (node.name == "free") {
-        emit_opcode(ir::OpCode::HELPERS);
-        emit_byte(1);  // FREE
-    } else if (node.name == "syscall") {
-        emit_opcode(ir::OpCode::CALL);
-        emit_uint32(0xFFFFFFFF);
+    uint8_t num_args = (uint8_t)node.args.size();
+    if (!node.args.empty() && dynamic_cast<const parser::VarargExpression *>(node.args.back().get())) {
+        num_args |= 0x80;
+    }
+    if (node.name == "syscall") {
+        emit_opcode(ir::OpCode::SYSCALL);
+        emit_byte(num_args);
     } else {
         emit_opcode(ir::OpCode::CALL);
         m_call_patches.push_back({m_program.bytecode.size(), node.name});
         emit_uint32(0);
+        emit_byte(num_args);
     }
 }
+
+void IRGenerator::visit(const parser::VarargExpression &node) { emit_opcode(ir::OpCode::PUSH_VARARGS); }
 
 void IRGenerator::emit_int(int32_t val) {
     uint8_t bytes[4];

@@ -3,7 +3,6 @@
 
 #include <memory>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace ether::parser {
@@ -19,6 +18,7 @@ struct ExpressionStatement;
 struct YieldStatement;
 struct SpawnExpression;
 struct AssignmentExpression;
+struct VarargExpression;
 struct IncrementExpression;
 struct DecrementExpression;
 struct AwaitExpression;
@@ -38,6 +38,8 @@ struct ASTVisitor {
     virtual void visit(const VariableExpression& node) {}
     virtual void visit(FunctionCall& node) { visit(static_cast<const FunctionCall&>(node)); }
     virtual void visit(const FunctionCall& node) {}
+    virtual void visit(VarargExpression& node) { visit(static_cast<const VarargExpression&>(node)); }
+    virtual void visit(const VarargExpression& node) {}
     virtual void visit(BinaryExpression& node) { visit(static_cast<const BinaryExpression&>(node)); }
     virtual void visit(const BinaryExpression& node) {}
     virtual void visit(Block& node) { visit(static_cast<const Block&>(node)); }
@@ -129,8 +131,16 @@ struct FunctionCall : Expression {
     std::string decl_filename;
     int decl_line = 0;
     int decl_col = 0;
+    std::vector<DataType> param_types;
+    bool is_variadic = false;
     FunctionCall(std::string n, std::vector<std::unique_ptr<Expression>> a, std::string fn, int l, int c)
         : Expression(std::move(fn), l, c), name(std::move(n)), args(std::move(a)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
+};
+
+struct VarargExpression : Expression {
+    VarargExpression(std::string fn, int l, int c) : Expression(std::move(fn), l, c) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
     void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
@@ -278,15 +288,17 @@ struct Function : Expression {
     int name_line;
     int name_col;
     std::vector<Parameter> params;
+    bool is_variadic;
     std::unique_ptr<Block> body;
-    Function(DataType rt, std::string n, int nl, int nc, std::vector<Parameter> p, std::unique_ptr<Block> b,
-             std::string fn, int l, int c)
+    Function(DataType rt, std::string n, int nl, int nc, std::vector<Parameter> p, bool variadic,
+             std::unique_ptr<Block> b, std::string fn, int l, int c)
         : Expression(std::move(fn), l, c),
           return_type(rt),
           name(std::move(n)),
           name_line(nl),
           name_col(nc),
           params(std::move(p)),
+          is_variadic(variadic),
           body(std::move(b)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
     void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }

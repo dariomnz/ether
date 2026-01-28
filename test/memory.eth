@@ -1,0 +1,13 @@
+// EXPECTED_OUTPUT: Get from malloc: 0x
+// EXPECTED_RESULT: 0
+#include "std/io.eth"
+
+int main() {
+    ptr p = malloc(100);
+    printf("Get from malloc: %p\n", p);
+    if (p == 0) {
+        return 1;
+    }
+    free(p);
+    return 0;
+}

@@ -12,6 +12,7 @@
 // EXPECTED_OUTPUT: Waiting for worker 2...
 // EXPECTED_OUTPUT: Worker 2 result: 3
 // EXPECTED_RESULT: 13
+#include "std/io.eth"
 
 int worker(int id, int count) {
     int sum = 0;

@@ -1,4 +1,6 @@
 // EXPECTED_OUTPUT: 42
+#include "std/io.eth"
+
 int main() {
     p_int(42);
     return 0;
