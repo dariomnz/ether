@@ -3,9 +3,12 @@ const path = require('path');
 const vscode = require('vscode');
 
 let client;
+let outputChannel;
 
-function activate(context) {
-    const outputChannel = vscode.window.createOutputChannel('Ether');
+async function startClient(context) {
+    if (!outputChannel) {
+        outputChannel = vscode.window.createOutputChannel('Ether');
+    }
     outputChannel.appendLine('Ether extension is now active!');
 
     // The server is our ether executable
@@ -35,7 +38,20 @@ function activate(context) {
     );
 
     outputChannel.appendLine('Starting Ether Language Server...');
-    client.start();
+    await client.start();
+}
+
+async function activate(context) {
+    await startClient(context);
+
+    context.subscriptions.push(vscode.commands.registerCommand('ether.restartServer', async () => {
+        if (client) {
+            outputChannel.appendLine('Restarting Ether Language Server...');
+            await client.stop();
+            client = undefined;
+        }
+        await startClient(context);
+    }));
 }
 
 function deactivate() {

@@ -14,13 +14,17 @@ namespace ether::lsp {
 class LSPServer {
    public:
     void run();
+    void stop() { m_running = false; }
 
    private:
+    bool m_running = true;
     void handle_message(const std::string& message);
     void send_response(const std::string& id, const std::string& result);
     void send_notification(const std::string& method, const std::string& params);
 
     void on_initialize(const std::string& id, const std::string& params);
+    void on_shutdown(const std::string& id);
+    void on_exit();
     void on_did_open(const std::string& params);
     void on_did_change(const std::string& params);
     void on_definition(const std::string& id, const std::string& params);

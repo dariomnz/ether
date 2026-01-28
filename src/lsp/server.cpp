@@ -16,7 +16,7 @@ using namespace ether::parser;
 
 void LSPServer::run() {
     std::cerr << "[LSP] Server started, waiting for messages..." << std::endl;
-    while (std::cin) {
+    while (m_running && std::cin) {
         std::string line;
         if (!std::getline(std::cin, line)) break;
 
@@ -119,6 +119,10 @@ void LSPServer::handle_message(const std::string& message) {
 
     if (method == "initialize") {
         on_initialize(id, message);
+    } else if (method == "shutdown") {
+        on_shutdown(id);
+    } else if (method == "exit") {
+        on_exit();
     } else if (method == "textDocument/didOpen") {
         on_did_open(message);
     } else if (method == "textDocument/didChange") {
@@ -158,6 +162,16 @@ void LSPServer::on_initialize(const std::string& id, const std::string& params) 
                   "\"full\":true"
                   "}"
                   "}}");
+}
+
+void LSPServer::on_shutdown(const std::string& id) {
+    std::cerr << "[LSP] Received shutdown request." << std::endl;
+    send_response(id, "null");
+}
+
+void LSPServer::on_exit() {
+    std::cerr << "[LSP] Received exit notification. Exiting..." << std::endl;
+    m_running = false;
 }
 
 void LSPServer::on_did_open(const std::string& params) {
@@ -215,6 +229,10 @@ struct NodeFinder : public ASTVisitor {
 
     void visit(Program& node) override {
         debug_msg("Visiting program " << node.filename);
+        for (auto& inc : node.includes) {
+            if (found) return;
+            inc->accept(*this);
+        }
         for (auto& f : node.functions) {
             if (found) return;
             f->accept(*this);
@@ -378,6 +396,22 @@ struct NodeFinder : public ASTVisitor {
     void visit(AwaitExpression& node) override {
         debug_msg("Visiting await expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.expr) node.expr->accept(*this);
+    }
+
+    void visit(Include& node) override {
+        debug_msg("Visiting include " << node.path << " at " << node.filename << ":" << node.line << ":"
+                                      << node.column);
+        if (found) return;
+        // Check if cursor is on the #include or the path
+        // For simplicity, we match the whole line of the include
+        if (node.line == line) {
+            found = true;
+            def_filename = node.path;
+            def_line = 1;
+            def_col = 1;
+            def_size = 0;  // LSP will just open the file at the start
+            hover_info = "include \"" + node.path + "\"";
+        }
     }
 };
 

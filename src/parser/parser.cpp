@@ -1,11 +1,14 @@
 #include "parser.hpp"
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
+
+namespace fs = std::filesystem;
 
 #include "common/error.hpp"
 #include "lexer/lexer.hpp"
@@ -44,26 +47,39 @@ std::unique_ptr<Program> Parser::parse_program() {
     program->filename = m_filename;
     while (!check(lexer::TokenType::EOF_TOKEN)) {
         if (match(lexer::TokenType::HashInclude)) {
+            const auto &include_token = m_tokens[m_pos - 1];
             if (!match(lexer::TokenType::StringLiteral)) {
                 const auto &token = peek();
                 throw CompilerError("Expected string literal after '#include'", m_filename, token.line, token.column,
                                     (int)token.lexeme.size());
             }
-            std::string path(m_tokens[m_pos - 1].lexeme);
+            const auto &path_token = m_tokens[m_pos - 1];
+            std::string path(path_token.lexeme);
+
+            // Resolve path relative to m_filename
+            fs::path current_dir = fs::path(m_filename).parent_path();
+            fs::path absolute_path = current_dir / path;
+            if (!fs::exists(absolute_path)) {
+                // Fallback to working directory relative
+                absolute_path = fs::absolute(path);
+            }
+            std::string resolved_path = absolute_path.lexically_normal().string();
+
+            program->includes.push_back(
+                std::make_unique<Include>(resolved_path, m_filename, include_token.line, include_token.column));
 
             // Recursive parse
-            std::ifstream file(path);
+            std::ifstream file(resolved_path);
             if (!file.is_open()) {
-                const auto &token = m_tokens[m_pos - 1];
-                throw CompilerError("Could not open included file: " + path, m_filename, token.line, token.column,
-                                    (int)token.lexeme.size());
+                throw CompilerError("Could not open included file: " + resolved_path, m_filename, path_token.line,
+                                    path_token.column, (int)path_token.lexeme.size());
             }
             std::stringstream buffer;
             buffer << file.rdbuf();
             std::string included_source = buffer.str();
-            lexer::Lexer imported_lexer(included_source, path);
+            lexer::Lexer imported_lexer(included_source, resolved_path);
             auto imported_tokens = imported_lexer.tokenize();
-            Parser imported_parser(imported_tokens, path);
+            Parser imported_parser(imported_tokens, resolved_path);
             auto imported_prog = imported_parser.parse_program();
 
             for (auto &f : imported_prog->functions) {

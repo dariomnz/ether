@@ -25,6 +25,7 @@ struct AwaitExpression;
 struct ForStatement;
 struct VariableDeclaration;
 struct Function;
+struct Include;
 struct Program;
 
 struct ASTVisitor {
@@ -65,6 +66,8 @@ struct ASTVisitor {
     virtual void visit(const VariableDeclaration& node) {}
     virtual void visit(Function& node) { visit(static_cast<const Function&>(node)); }
     virtual void visit(const Function& node) {}
+    virtual void visit(Include& node) { visit(static_cast<const Include&>(node)); }
+    virtual void visit(const Include& node) {}
     virtual void visit(Program& node) { visit(static_cast<const Program&>(node)); }
     virtual void visit(const Program& node) {}
 };
@@ -289,7 +292,15 @@ struct Function : Expression {
     void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
+struct Include : ASTNode {
+    std::string path;
+    Include(std::string p, std::string fn, int l, int c) : ASTNode(std::move(fn), l, c), path(std::move(p)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
+};
+
 struct Program : ASTNode {
+    std::vector<std::unique_ptr<Include>> includes;
     std::vector<std::unique_ptr<Function>> functions;
     Program() : ASTNode("", 0, 0) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
