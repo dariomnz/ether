@@ -1,0 +1,10 @@
+// Async I/O Test
+
+#include "std/io.eth"
+
+int main() {
+    printf("Writing to terminal async...\n");
+    int written = await write(1, "Hello from io_uring!\n", 21);
+    printf("Bytes written: %d\n", written);
+    return 0;
+}

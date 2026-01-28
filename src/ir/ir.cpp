@@ -85,6 +85,9 @@ std::ostream &operator<<(std::ostream &os, OpCode op) {
         case OpCode::POP:
             os << "POP";
             break;
+        case OpCode::HELPERS:
+            os << "HELPERS";
+            break;
     }
     return os;
 }

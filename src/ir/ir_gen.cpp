@@ -5,18 +5,108 @@
 
 namespace ether::ir_gen {
 
+namespace {
+struct DependencyTracker : public parser::ASTVisitor {
+    std::unordered_set<std::string> reachable;
+    const std::unordered_map<std::string, const parser::Function *> &all_funcs;
+
+    DependencyTracker(const std::unordered_map<std::string, const parser::Function *> &funcs) : all_funcs(funcs) {}
+
+    void trace(const std::string &name) {
+        if (name == "printf" || name == "malloc" || name == "free" || name == "syscall") return;
+        if (reachable.contains(name)) return;
+        reachable.insert(name);
+        auto it = all_funcs.find(name);
+        if (it != all_funcs.end()) {
+            it->second->accept(*this);
+        }
+    }
+
+    void visit(const parser::IntegerLiteral &) override {}
+    void visit(const parser::StringLiteral &) override {}
+    void visit(const parser::VariableExpression &) override {}
+    void visit(const parser::FunctionCall &node) override {
+        trace(node.name);
+        for (const auto &arg : node.args) arg->accept(*this);
+    }
+    void visit(const parser::BinaryExpression &node) override {
+        if (node.left) node.left->accept(*this);
+        if (node.right) node.right->accept(*this);
+    }
+    void visit(const parser::Block &node) override {
+        for (const auto &stmt : node.statements) stmt->accept(*this);
+    }
+    void visit(const parser::IfStatement &node) override {
+        if (node.condition) node.condition->accept(*this);
+        if (node.then_branch) node.then_branch->accept(*this);
+        if (node.else_branch) node.else_branch->accept(*this);
+    }
+    void visit(const parser::ReturnStatement &node) override {
+        if (node.expr) node.expr->accept(*this);
+    }
+    void visit(const parser::ExpressionStatement &node) override {
+        if (node.expr) node.expr->accept(*this);
+    }
+    void visit(const parser::YieldStatement &) override {}
+    void visit(const parser::SpawnExpression &node) override {
+        if (node.call) node.call->accept(*this);
+    }
+    void visit(const parser::AssignmentExpression &node) override {
+        if (node.value) node.value->accept(*this);
+    }
+    void visit(const parser::IncrementExpression &node) override {
+        if (node.lvalue) node.lvalue->accept(*this);
+    }
+    void visit(const parser::DecrementExpression &node) override {
+        if (node.lvalue) node.lvalue->accept(*this);
+    }
+    void visit(const parser::AwaitExpression &node) override {
+        if (node.expr) node.expr->accept(*this);
+    }
+    void visit(const parser::ForStatement &node) override {
+        if (node.init) node.init->accept(*this);
+        if (node.condition) node.condition->accept(*this);
+        if (node.increment) node.increment->accept(*this);
+        if (node.body) node.body->accept(*this);
+    }
+    void visit(const parser::VariableDeclaration &node) override {
+        if (node.init) node.init->accept(*this);
+    }
+    void visit(const parser::Function &node) override {
+        if (node.body) node.body->accept(*this);
+    }
+    void visit(const parser::Program &) override {}
+};
+}  // namespace
+
 ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
     m_program.bytecode.clear();
     m_program.string_pool.clear();
     m_program.functions.clear();
     m_call_patches.clear();
+    m_reachable.clear();
 
-    // First pass: collect function signatures and names
+    // First pass: collect all function definitions
+    std::unordered_map<std::string, const parser::Function *> all_funcs;
     for (const auto &func : ast.functions) {
-        m_program.functions[func->name] = {0, (uint8_t)func->params.size(), 0};
+        all_funcs[func->name] = func.get();
     }
 
-    // Second pass: generate code
+    // Trace dependencies starting from main
+    DependencyTracker tracker(all_funcs);
+    tracker.trace("main");
+    m_reachable = std::move(tracker.reachable);
+
+    // Initial pass for reachable function signatures
+    for (const auto &name : m_reachable) {
+        const auto *func = all_funcs.at(name);
+        m_program.functions[name] = {0, (uint8_t)func->params.size(), 0};
+    }
+
+    // Register built-in native functions
+    m_program.functions["syscall"] = {0xFFFFFFFF, 5, 0};
+
+    // Second pass: generate code for reachable functions
     ast.accept(*this);
 
     emit_opcode(ir::OpCode::HALT);
@@ -35,6 +125,7 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
 
 void IRGenerator::visit(const parser::Program &node) {
     for (const auto &func : node.functions) {
+        if (!m_reachable.contains(func->name)) continue;
         m_program.functions[func->name].entry_addr = m_program.bytecode.size();
         if (func->name == "main") m_program.main_addr = m_program.bytecode.size();
         func->accept(*this);
@@ -210,8 +301,12 @@ void IRGenerator::visit(const parser::SpawnExpression &node) {
         arg->accept(*this);
     }
     emit_opcode(ir::OpCode::SPAWN);
-    m_call_patches.push_back({m_program.bytecode.size(), node.call->name});
-    emit_uint32(0);
+    if (node.call->name == "syscall") {
+        emit_uint32(0xFFFFFFFF);
+    } else {
+        m_call_patches.push_back({m_program.bytecode.size(), node.call->name});
+        emit_uint32(0);
+    }
 }
 
 void IRGenerator::visit(const parser::BinaryExpression &node) {
@@ -259,11 +354,18 @@ void IRGenerator::visit(const parser::FunctionCall &node) {
     for (const auto &arg : node.args) {
         arg->accept(*this);
     }
-    if (node.name == "write") {
-        emit_opcode(ir::OpCode::SYS_WRITE);
-    } else if (node.name == "printf") {
+    if (node.name == "printf") {
         emit_opcode(ir::OpCode::SYS_PRINTF);
         emit_byte((uint8_t)node.args.size());
+    } else if (node.name == "malloc") {
+        emit_opcode(ir::OpCode::HELPERS);
+        emit_byte(0);  // MALLOC
+    } else if (node.name == "free") {
+        emit_opcode(ir::OpCode::HELPERS);
+        emit_byte(1);  // FREE
+    } else if (node.name == "syscall") {
+        emit_opcode(ir::OpCode::CALL);
+        emit_uint32(0xFFFFFFFF);
     } else {
         emit_opcode(ir::OpCode::CALL);
         m_call_patches.push_back({m_program.bytecode.size(), node.name});

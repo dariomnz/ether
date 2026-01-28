@@ -1,0 +1,12 @@
+// ARGS: --dump-ir
+// EXPECTED_OUTPUT: <function: main>
+// NOT_EXPECTED_OUTPUT: <function: unused_func>
+
+int unused_func() {
+    return 42;
+}
+
+int main() {
+    printf("Reachable\n");
+    return 0;
+}

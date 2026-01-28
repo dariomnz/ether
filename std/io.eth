@@ -1,4 +1,15 @@
-int print(string msg) {
-  write(1, msg);
-  return 0;
+coroutine open(string path, int flags, int mode) {
+    return spawn syscall(0, 0, path, flags, mode);
+}
+
+coroutine read(int fd, string buf, int size) {
+    return spawn syscall(1, fd, buf, size, 0);
+}
+
+coroutine write(int fd, string buf, int size) {
+    return spawn syscall(2, fd, buf, size, 0);
+}
+
+coroutine close(int fd) {
+    return spawn syscall(3, fd, 0, 0, 0);
 }

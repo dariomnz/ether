@@ -1,5 +1,6 @@
 #include "vm.hpp"
 
+#include <fcntl.h>
 #include <unistd.h>
 
 #include <cstring>
@@ -26,7 +27,13 @@ VM::VM(const ir::IRProgram &program) : program_(program) {
     }
 
     m_coroutines.push_back(std::move(main_coro));
+
+    if (io_uring_queue_init(32, &ring_, 0) < 0) {
+        throw std::runtime_error("Failed to initialize io_uring");
+    }
 }
+
+VM::~VM() { io_uring_queue_exit(&ring_); }
 
 Value VM::run(bool collect_stats) {
     const auto &program = program_;
@@ -54,6 +61,37 @@ Value VM::run(bool collect_stats) {
             }
         }
 
+        if (m_coroutines[m_current_coro].waiting_for_io) {
+            handle_io_completion();
+        }
+
+        if (m_coroutines[m_current_coro].finished) {
+            continue;
+        }
+
+        if (m_coroutines[m_current_coro].waiting_for_io) {
+            bool all_waiting = true;
+            for (const auto &coro : m_coroutines) {
+                if (!coro.waiting_for_io && !coro.finished && coro.waiting_for_id == -1) {
+                    all_waiting = false;
+                    break;
+                }
+            }
+
+            if (all_waiting) {
+                struct io_uring_cqe *cqe;
+                io_uring_wait_cqe(&ring_, &cqe);
+                handle_io_completion();
+            }
+
+            if (m_coroutines[m_current_coro].finished || m_coroutines[m_current_coro].waiting_for_io) {
+                if (m_coroutines[m_current_coro].waiting_for_io) {
+                    m_current_coro++;
+                }
+                continue;
+            }
+        }
+
 #define CUR_CORO()    m_coroutines[m_current_coro]
 #define READ_BYTE()   code[CUR_CORO().ip++]
 #define READ_INT()    (*(int32_t *)&code[(CUR_CORO().ip += 4) - 4])
@@ -61,7 +99,19 @@ Value VM::run(bool collect_stats) {
 
         // Execute instructions until yield or termination
         bool yielded = false;
-        while (!yielded && CUR_CORO().ip < program.bytecode.size()) {
+        while (!yielded) {
+            if (CUR_CORO().ip == 0xFFFFFFFF) {
+                submit_syscall(CUR_CORO());
+                // After syscall completion, it should return/finish if it was spawned.
+                // But wait, submit_syscall only starts it.
+                // When completion happens, we want it to RET.
+                // For now, let's just make it yield.
+                yielded = true;
+                break;
+            }
+
+            if (CUR_CORO().ip >= program.bytecode.size()) break;
+
             uint8_t op_byte = READ_BYTE();
             ir::OpCode op = static_cast<ir::OpCode>(op_byte);
 
@@ -148,6 +198,11 @@ Value VM::run(bool collect_stats) {
 
                 case ir::OpCode::CALL: {
                     uint32_t target_addr = READ_UINT32();
+                    if (target_addr == 0xFFFFFFFF) {
+                        submit_syscall(CUR_CORO());
+                        yielded = true;
+                        break;
+                    }
                     const auto &info = program.addr_to_info.at(target_addr);
                     uint8_t num_params = info.num_params;
                     uint8_t num_slots = info.num_slots;
@@ -283,9 +338,17 @@ Value VM::run(bool collect_stats) {
 
                 case ir::OpCode::SPAWN: {
                     uint32_t target_addr = READ_UINT32();
-                    const auto &info = program.addr_to_info.at(target_addr);
-                    uint8_t num_params = info.num_params;
-                    uint8_t num_slots = info.num_slots;
+                    uint8_t num_params;
+                    uint8_t num_slots;
+
+                    if (target_addr == 0xFFFFFFFF) {
+                        num_params = 5;
+                        num_slots = 5;
+                    } else {
+                        const auto &info = program.addr_to_info.at(target_addr);
+                        num_params = info.num_params;
+                        num_slots = info.num_slots;
+                    }
 
                     Coroutine new_coro;
                     uint32_t new_id = m_next_coro_id++;
@@ -336,6 +399,25 @@ Value VM::run(bool collect_stats) {
                     yielded = true;
                     break;
 
+                case ir::OpCode::HELPERS: {
+                    uint8_t helper_id = READ_BYTE();
+                    if (helper_id == 0) {  // MALLOC
+                        int32_t size = pop().as.i32;
+                        void *ptr = malloc(size);
+                        Value res;
+                        res.type = ValueType::Ptr;
+                        res.as.ptr = ptr;
+                        push(res);
+                    } else if (helper_id == 1) {  // FREE
+                        Value ptr_val = pop();
+                        if (ptr_val.type == ValueType::Ptr) {
+                            free(ptr_val.as.ptr);
+                        }
+                        push(Value(0));
+                    }
+                    break;
+                }
+
                 default:
                     throw std::runtime_error("Unsupported opcode");
             }
@@ -353,6 +435,92 @@ Value VM::run(bool collect_stats) {
         }
     }
     return main_result;
+}
+
+void VM::handle_io_completion() {
+    struct io_uring_cqe *cqe;
+    while (io_uring_peek_cqe(&ring_, &cqe) == 0) {
+        uint32_t coro_id = (uint32_t)(uintptr_t)io_uring_cqe_get_data(cqe);
+        int32_t res = cqe->res;
+        io_uring_cqe_seen(&ring_, cqe);
+
+        for (auto &coro : m_coroutines) {
+            if (coro.id == coro_id) {
+                coro.stack.push_back(Value(res));
+                coro.waiting_for_io = false;
+                if (coro.ip == 0xFFFFFFFF) {
+                    // It was a spawned native call, mark it as finished
+                    coro.result = res;
+                    coro.finished = true;
+                }
+                break;
+            }
+        }
+    }
+}
+
+void VM::submit_syscall(Coroutine &coro) {
+    auto &stack = coro.stack;
+    if (stack.size() < 5) {
+        coro.stack.push_back(Value(-3));  // Stack error
+        coro.finished = true;
+        return;
+    }
+
+    int32_t p4 = stack.back().as.i32;
+    stack.pop_back();
+    int32_t p3 = stack.back().as.i32;
+    stack.pop_back();
+
+    Value p2_val = stack.back();
+    const char *p2_str = nullptr;
+    int32_t p2_int = 0;
+    if (p2_val.type == ValueType::String) {
+        p2_str = p2_val.as.str;
+    } else if (p2_val.type == ValueType::Ptr) {
+        p2_str = (const char *)p2_val.as.ptr;
+    } else {
+        p2_int = p2_val.as.i32;
+    }
+    stack.pop_back();
+
+    int32_t p1 = stack.back().as.i32;
+    stack.pop_back();
+    int32_t id = stack.back().as.i32;
+    stack.pop_back();
+
+    struct io_uring_sqe *sqe = io_uring_get_sqe(&ring_);
+    if (!sqe) {
+        coro.stack.push_back(Value(-1));  // Error
+        return;
+    }
+
+    switch (id) {
+        case 0:  // OPEN
+            io_uring_prep_openat(sqe, AT_FDCWD, p2_str, p3, p4);
+            break;
+        case 1:  // READ
+            io_uring_prep_read(sqe, p1, (void *)p2_str, p3, p4);
+            break;
+        case 2:  // WRITE
+            if (p2_str) {
+                io_uring_prep_write(sqe, p1, p2_str, p3, p4);
+            } else {
+                // Handle int to string conversion if needed, but for now assume string
+                io_uring_prep_write(sqe, p1, &p2_int, sizeof(p2_int), p4);
+            }
+            break;
+        case 3:  // CLOSE
+            io_uring_prep_close(sqe, p1);
+            break;
+        default:
+            coro.stack.push_back(Value(-2));  // Unknown syscall
+            return;
+    }
+
+    io_uring_sqe_set_data(sqe, (void *)(uintptr_t)coro.id);
+    io_uring_submit(&ring_);
+    coro.waiting_for_io = true;
 }
 
 }  // namespace ether::vm

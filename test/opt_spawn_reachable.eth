@@ -1,0 +1,9 @@
+// ARGS: --dump-ir
+// EXPECTED_OUTPUT: <function: worker>
+// EXPECTED_OUTPUT: <function: main>
+
+int worker() { return 0; }
+int main() {
+    spawn worker();
+    return 0;
+}

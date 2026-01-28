@@ -20,6 +20,8 @@ struct TestCase {
     fs::path path;
     std::optional<int> expected_result;
     std::vector<std::string> expected_outputs;
+    std::vector<std::string> not_expected_outputs;
+    std::string args;
 };
 
 struct ExecResult {
@@ -46,7 +48,7 @@ bool run_test(const std::string& ether_bin, const TestCase& tc) {
     auto start = std::chrono::high_resolution_clock::now();
     try {
         // Use 'timeout 1s' to prevent hanging
-        std::string cmd = "timeout 1s " + ether_bin + " " + tc.path.string() + " 2>&1";
+        std::string cmd = "timeout 1s " + ether_bin + " " + tc.path.string() + " " + tc.args + " 2>&1";
         ExecResult res = exec(cmd);
         std::string output = res.output;
 
@@ -81,6 +83,12 @@ bool run_test(const std::string& ether_bin, const TestCase& tc) {
         for (const auto& expected_out : tc.expected_outputs) {
             if (output.find(expected_out) == std::string::npos) {
                 errors.push_back("Expected output substring '" + expected_out + "' not found");
+            }
+        }
+
+        for (const auto& not_expected_out : tc.not_expected_outputs) {
+            if (output.find(not_expected_out) != std::string::npos) {
+                errors.push_back("Not expected output substring '" + not_expected_out + "' found");
             }
         }
         auto end = std::chrono::high_resolution_clock::now();
@@ -123,20 +131,30 @@ int run_tests(const std::string& ether_bin, const std::string& test_path) {
             std::string line;
             std::string res_marker = "// EXPECTED_RESULT:";
             std::string out_marker = "// EXPECTED_OUTPUT:";
+            std::string args_marker = "// ARGS:";
+            std::string nout_marker = "// NOT_EXPECTED_OUTPUT:";
 
             while (std::getline(file, line)) {
                 if (size_t pos = line.find(res_marker); pos != std::string::npos) {
                     std::string val = line.substr(pos + res_marker.length());
-                    // Trim whitespace
                     val.erase(0, val.find_first_not_of(" \t"));
                     val.erase(val.find_last_not_of(" \t") + 1);
                     if (!val.empty()) tc.expected_result = std::stoi(val);
                 } else if (size_t pos = line.find(out_marker); pos != std::string::npos) {
                     std::string val = line.substr(pos + out_marker.length());
-                    // Trim whitespace
                     val.erase(0, val.find_first_not_of(" \t"));
                     val.erase(val.find_last_not_of(" \t") + 1);
                     if (!val.empty()) tc.expected_outputs.push_back(val);
+                } else if (size_t pos = line.find(nout_marker); pos != std::string::npos) {
+                    std::string val = line.substr(pos + nout_marker.length());
+                    val.erase(0, val.find_first_not_of(" \t"));
+                    val.erase(val.find_last_not_of(" \t") + 1);
+                    if (!val.empty()) tc.not_expected_outputs.push_back(val);
+                } else if (size_t pos = line.find(args_marker); pos != std::string::npos) {
+                    std::string val = line.substr(pos + args_marker.length());
+                    val.erase(0, val.find_first_not_of(" \t"));
+                    val.erase(val.find_last_not_of(" \t") + 1);
+                    if (!val.empty()) tc.args = val;
                 }
             }
             tests.push_back(tc);

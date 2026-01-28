@@ -37,7 +37,8 @@ enum class OpCode : uint8_t {
     SPAWN,       // [uint8_t opcode] [uint32_t target_addr] (5 bytes)
     YIELD,       // [uint8_t opcode] (1 byte)
     AWAIT,       // [uint8_t opcode] (1 byte)
-    POP          // [uint8_t opcode] (1 byte)
+    POP,         // [uint8_t opcode] (1 byte)
+    HELPERS      // [uint8_t opcode] [uint8_t helper_id] (2 bytes)
 };
 
 struct IRProgram {

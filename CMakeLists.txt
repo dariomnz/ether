@@ -13,3 +13,9 @@ file(GLOB_RECURSE SOURCES
 add_executable(ether ${SOURCES})
 
 target_include_directories(ether PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+find_library(LIBURING uring)
+if(NOT LIBURING)
+    message(FATAL_ERROR "liburing not found")
+endif()
+target_link_libraries(ether PRIVATE ${LIBURING})

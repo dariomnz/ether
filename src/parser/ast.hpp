@@ -80,7 +80,7 @@ struct ASTNode {
 };
 
 struct DataType {
-    enum class Kind { Int, Coroutine, Void };
+    enum class Kind { Int, Coroutine, Void, Ptr };
     Kind kind;
     DataType() : kind(Kind::Int) {}
     explicit DataType(Kind k) : kind(k) {}

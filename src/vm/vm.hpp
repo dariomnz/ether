@@ -1,6 +1,8 @@
 #ifndef ETHER_VM_HPP
 #define ETHER_VM_HPP
 
+#include <liburing.h>
+
 #include <chrono>
 #include <cstdint>
 #include <string_view>
@@ -11,7 +13,7 @@
 
 namespace ether::vm {
 
-enum class ValueType : uint8_t { Int, String };
+enum class ValueType : uint8_t { Int, String, Ptr };
 
 struct Value {
     ValueType type;
@@ -19,6 +21,7 @@ struct Value {
     union {
         int32_t i32;
         const char* str;  // string_view representation
+        void* ptr;        // raw pointer for I/O buffers
     } as;
 
     Value() : type(ValueType::Int) { as.i32 = 0; }
@@ -53,6 +56,7 @@ struct CallFrame {
 struct Coroutine {
     uint32_t id;
     int32_t waiting_for_id = -1;  // ID of coroutine we are awaiting
+    bool waiting_for_io = false;  // Flag for I/O wait
     std::vector<Value> stack;
     std::vector<CallFrame> call_stack;
     size_t ip;
@@ -63,6 +67,7 @@ struct Coroutine {
 class VM {
    public:
     explicit VM(const ir::IRProgram& program);
+    ~VM();
     Value run(bool collect_stats = false);
 
     const std::unordered_map<ir::OpCode, OpCodeStats>& get_stats() const { return m_stats; }
@@ -74,6 +79,11 @@ class VM {
     uint32_t m_next_coro_id = 1;
     std::unordered_map<uint32_t, Value> m_finished_coros;
     std::unordered_map<ir::OpCode, OpCodeStats> m_stats;
+
+    struct io_uring ring_;
+
+    void handle_io_completion();
+    void submit_syscall(Coroutine& coro);
 
     inline void push(Value val) { m_coroutines[m_current_coro].stack.push_back(val); }
     inline Value pop() {

@@ -197,6 +197,8 @@ static std::string type_to_string(const ether::parser::DataType& type) {
             return "coroutine";
         case ether::parser::DataType::Kind::Void:
             return "void";
+        case ether::parser::DataType::Kind::Ptr:
+            return "ptr";
     }
     return "unknown";
 }

@@ -9,8 +9,15 @@ using namespace parser;
 void Analyzer::analyze(Program &program) {
     // Register built-ins
     m_functions["printf"] = {DataType(DataType::Kind::Int), {}, "", 0, 0};
-    m_functions["write"] = {
-        DataType(DataType::Kind::Int), {DataType(DataType::Kind::Int), DataType(DataType::Kind::Int)}, "", 0, 0};
+    m_functions["malloc"] = {DataType(DataType::Kind::Ptr), {DataType(DataType::Kind::Int)}, "", 0, 0};
+    m_functions["free"] = {DataType(DataType::Kind::Int), {DataType(DataType::Kind::Ptr)}, "", 0, 0};
+    m_functions["syscall"] = {
+        DataType(DataType::Kind::Int),
+        {DataType(DataType::Kind::Int), DataType(DataType::Kind::Int), DataType(DataType::Kind::Int),
+         DataType(DataType::Kind::Int), DataType(DataType::Kind::Int)},
+        "",
+        0,
+        0};
 
     // First pass: collect function signatures
     for (const auto &func : program.functions) {
