@@ -208,6 +208,7 @@ struct NodeFinder : public ASTVisitor {
     std::string def_filename = "";
     int def_line = 0;
     int def_col = 0;
+    int def_size = 0;
     std::string hover_info = "";
 
     void visit(Program& node) override {
@@ -227,6 +228,7 @@ struct NodeFinder : public ASTVisitor {
             def_filename = node.filename;
             def_line = node.name_line;
             def_col = node.name_col;
+            def_size = (int)node.name.size();
 
             std::stringstream ss;
             ss << "(function) " << type_to_string(node.return_type) << " " << node.name << "(";
@@ -258,6 +260,7 @@ struct NodeFinder : public ASTVisitor {
             def_filename = node.filename;
             def_line = node.name_line;
             def_col = node.name_col;
+            def_size = (int)node.name.size();
             hover_info = "(variable) " + type_to_string(node.type) + " " + node.name;
             return;
         }
@@ -268,11 +271,12 @@ struct NodeFinder : public ASTVisitor {
         debug_msg("Visiting function call " << node.name << " at " << node.filename << ":" << node.line << ":"
                                             << node.column);
         if (found) return;
-        if (node.line == line && col >= node.column && col <= node.column + (int)node.name.size()) {
+        if (node.line == line && col >= node.column && col < node.column + (int)node.name.size()) {
             found = true;
             def_filename = node.decl_filename;
             def_line = node.decl_line;
             def_col = node.decl_col;
+            def_size = (int)node.name.size();
             if (node.type) {
                 hover_info = "(call) " + node.name + " -> " + type_to_string(*node.type);
             } else {
@@ -290,11 +294,12 @@ struct NodeFinder : public ASTVisitor {
         debug_msg("Visiting variable expression " << node.name << " at " << node.filename << ":" << node.line << ":"
                                                   << node.column);
         if (found) return;
-        if (node.line == line && col >= node.column && col <= node.column + (int)node.name.size()) {
+        if (node.line == line && col >= node.column && col < node.column + (int)node.name.size()) {
             found = true;
             def_filename = node.decl_filename;
             def_line = node.decl_line;
             def_col = node.decl_col;
+            def_size = (int)node.name.size();
             if (node.type) {
                 hover_info = "(variable) " + type_to_string(*node.type) + " " + node.name;
             } else {
@@ -416,8 +421,8 @@ void LSPServer::on_definition(const std::string& id, const std::string& params) 
             std::stringstream ss;
             ss << "{\"uri\":\"file://" << finder.def_filename << "\",\"range\":{"
                << "\"start\":{\"line\":" << (finder.def_line - 1) << ",\"character\":" << (finder.def_col - 1) << "},"
-               << "\"end\":{\"line\":" << (finder.def_line - 1) << ",\"character\":" << (finder.def_col - 1 + 5)
-               << "}"  // Dummy end
+               << "\"end\":{\"line\":" << (finder.def_line - 1)
+               << ",\"character\":" << (finder.def_col - 1 + finder.def_size) << "}"
                << "}}";
             send_response(id, ss.str());
             return;
@@ -634,7 +639,7 @@ void LSPServer::publish_diagnostics(const std::string& filename, const std::vect
         ss << "{"
            << "\"range\":{"
            << "\"start\":{\"line\":" << (e.line() - 1) << ",\"character\":" << (e.col() - 1) << "},"
-           << "\"end\":{\"line\":" << (e.line() - 1) << ",\"character\":" << (e.col()) << "}"
+           << "\"end\":{\"line\":" << (e.line() - 1) << ",\"character\":" << (e.col() - 1 + e.length()) << "}"
            << "},"
            << "\"severity\":1,"
            << "\"message\":\"" << escape_json(e.what()) << "\""
@@ -652,11 +657,15 @@ void LSPServer::process_file(const std::string& filename, const std::string& sou
         auto tokens = lexer.tokenize();
         ether::parser::Parser parser(tokens, filename);
         auto program_ast = parser.parse_program();
-        std::cerr << "[LSP] Parsed " << program_ast->functions.size() << " functions." << std::endl;
-        ether::sema::Analyzer analyzer;
-        analyzer.analyze(*program_ast);
 
+        // Store AST now, so even if sema fails, the LSP has the latest structural info
+        auto* ast_ptr = program_ast.get();
         m_documents[filename] = {source, std::move(program_ast)};
+
+        std::cerr << "[LSP] Parsed " << ast_ptr->functions.size() << " functions." << std::endl;
+        ether::sema::Analyzer analyzer;
+        analyzer.analyze(*ast_ptr);
+
         std::cerr << "[LSP] Analysis complete for " << filename << std::endl;
         publish_diagnostics(filename, {});
     } catch (const CompilerError& e) {

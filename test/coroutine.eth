@@ -1,3 +1,22 @@
+// EXPECTED_OUTPUT: Starting coroutines...
+// EXPECTED_OUTPUT: Main finished spawning.
+// EXPECTED_OUTPUT: Worker 5: loop 0
+// EXPECTED_OUTPUT: Worker 4: loop 0
+// EXPECTED_OUTPUT: Worker 3: loop 0
+// EXPECTED_OUTPUT: Worker 2: loop 0
+// EXPECTED_OUTPUT: Worker 1: loop 0
+// EXPECTED_OUTPUT: Worker 5: loop 1
+// EXPECTED_OUTPUT: Worker 4: loop 1
+// EXPECTED_OUTPUT: Worker 3: loop 1
+// EXPECTED_OUTPUT: Worker 2: loop 1
+// EXPECTED_OUTPUT: Worker 5: loop 2
+// EXPECTED_OUTPUT: Worker 4: loop 2
+// EXPECTED_OUTPUT: Worker 3: loop 2
+// EXPECTED_OUTPUT: Worker 5: loop 3
+// EXPECTED_OUTPUT: Worker 4: loop 3
+// EXPECTED_OUTPUT: Worker 5: loop 4
+// EXPECTED_RESULT: 0
+
 int worker(int id, int count) {
     for (int i = 0; i < count; i++) {
         printf("Worker %d: loop %d\n", id, i);

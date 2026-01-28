@@ -1,0 +1,73 @@
+// EXPECTED_OUTPUT: Starting worker...
+// EXPECTED_OUTPUT: Waiting for worker 1...
+// EXPECTED_OUTPUT: Worker 1: loop 0
+// EXPECTED_OUTPUT: Worker 2: loop 0
+// EXPECTED_OUTPUT: Worker 1: added 0
+// EXPECTED_OUTPUT: Worker 2: added 0
+// EXPECTED_OUTPUT: Worker 1: loop 1
+// EXPECTED_OUTPUT: Worker 2: loop 1
+// EXPECTED_OUTPUT: Worker2 1: loop 0
+// EXPECTED_OUTPUT: Worker2 2: loop 0
+// EXPECTED_OUTPUT: Worker 1: added 0
+// EXPECTED_OUTPUT: Worker 2: added 0
+// EXPECTED_OUTPUT: Worker 1: loop 2
+// EXPECTED_OUTPUT: Worker 2: loop 2
+// EXPECTED_OUTPUT: Worker2 1: loop 0
+// EXPECTED_OUTPUT: Worker2 2: loop 0
+// EXPECTED_OUTPUT: Worker2 1: loop 1
+// EXPECTED_OUTPUT: Worker2 2: loop 1
+// EXPECTED_OUTPUT: Worker 1: added 1
+// EXPECTED_OUTPUT: Worker 2: added 1
+// EXPECTED_OUTPUT: Worker 1: loop 3
+// EXPECTED_OUTPUT: Worker2 1: loop 0
+// EXPECTED_OUTPUT: Worker2 1: loop 1
+// EXPECTED_OUTPUT: Worker2 1: loop 2
+// EXPECTED_OUTPUT: Worker 1: added 3
+// EXPECTED_OUTPUT: Worker 1: loop 4
+// EXPECTED_OUTPUT: Worker2 1: loop 0
+// EXPECTED_OUTPUT: Worker2 1: loop 1
+// EXPECTED_OUTPUT: Worker2 1: loop 2
+// EXPECTED_OUTPUT: Worker2 1: loop 3
+// EXPECTED_OUTPUT: Worker 1: added 6
+// EXPECTED_OUTPUT: Worker 1 result: 10
+// EXPECTED_OUTPUT: Waiting for worker 2...
+// EXPECTED_OUTPUT: Worker 2 result: 1
+// EXPECTED_RESULT: 11
+
+int worker2(int id, int count) {
+    int sum = 0;
+    for (int i = 0; i < count; i++) {
+        printf("Worker2 %d: loop %d\n", id, i);
+        sum = sum + i;
+        yield;
+    }
+    return sum;
+}
+
+int worker(int id, int count) {
+    int sum = 0;
+    for (int i = 0; i < count; i++) {
+        printf("Worker %d: loop %d\n", id, i);
+        int to_add = await spawn worker2(id, i);
+        printf("Worker %d: added %d\n", id, to_add);
+        sum = sum + to_add;
+        yield;
+    }
+    return sum;
+}
+
+int main() {
+    printf("Starting worker...\n");
+    coroutine h1 = spawn worker(1, 5);
+    coroutine h2 = spawn worker(2, 3);
+
+    printf("Waiting for worker 1...\n");
+    int res1 = await h1;
+    printf("Worker 1 result: %d\n", res1);
+
+    printf("Waiting for worker 2...\n");
+    int res2 = await h2;
+    printf("Worker 2 result: %d\n", res2);
+
+    return res1 + res2;
+}

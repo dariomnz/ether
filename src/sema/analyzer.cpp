@@ -95,7 +95,8 @@ void Analyzer::visit(StringLiteral &node) {
 void Analyzer::visit(VariableExpression &node) {
     const Symbol *sym = lookup_symbol(node.name);
     if (!sym) {
-        throw CompilerError("Undefined variable: " + node.name, node.filename, node.line, node.column);
+        throw CompilerError("Undefined variable: " + node.name, node.filename, node.line, node.column,
+                            (int)node.name.size());
     }
     node.decl_filename = sym->filename;
     node.decl_line = sym->line;
@@ -119,11 +120,13 @@ void Analyzer::visit(BinaryExpression &node) {
 
 void Analyzer::visit(FunctionCall &node) {
     if (m_functions.find(node.name) == m_functions.end()) {
-        throw CompilerError("Undefined function: " + node.name, node.filename, node.line, node.column);
+        throw CompilerError("Undefined function: " + node.name, node.filename, node.line, node.column,
+                            (int)node.name.size());
     }
     const auto &info = m_functions[node.name];
     if (node.name != "printf" && node.args.size() != info.param_types.size()) {
-        throw CompilerError("Wrong number of arguments for " + node.name, node.filename, node.line, node.column);
+        throw CompilerError("Wrong number of arguments for " + node.name, node.filename, node.line, node.column,
+                            (int)node.name.size());
     }
     node.decl_filename = info.filename;
     node.decl_line = info.line;
@@ -188,7 +191,7 @@ DataType Analyzer::lookup_variable(const std::string &name, std::string filename
     if (sym) {
         return sym->type;
     }
-    throw CompilerError("Undefined variable: " + name, std::move(filename), line, col);
+    throw CompilerError("Undefined variable: " + name, std::move(filename), line, col, (int)name.size());
 }
 
 const Analyzer::Symbol *Analyzer::lookup_symbol(const std::string &name) {

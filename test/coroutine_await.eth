@@ -1,3 +1,18 @@
+// EXPECTED_OUTPUT: Starting worker...
+// EXPECTED_OUTPUT: Waiting for worker 1...
+// EXPECTED_OUTPUT: Worker 1: loop 0
+// EXPECTED_OUTPUT: Worker 2: loop 0
+// EXPECTED_OUTPUT: Worker 1: loop 1
+// EXPECTED_OUTPUT: Worker 2: loop 1
+// EXPECTED_OUTPUT: Worker 1: loop 2
+// EXPECTED_OUTPUT: Worker 2: loop 2
+// EXPECTED_OUTPUT: Worker 1: loop 3
+// EXPECTED_OUTPUT: Worker 1: loop 4
+// EXPECTED_OUTPUT: Worker 1 result: 10
+// EXPECTED_OUTPUT: Waiting for worker 2...
+// EXPECTED_OUTPUT: Worker 2 result: 3
+// EXPECTED_RESULT: 13
+
 int worker(int id, int count) {
     int sum = 0;
     for (int i = 0; i < count; i++) {

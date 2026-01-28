@@ -35,7 +35,8 @@ bool Parser::match(lexer::TokenType type) {
 DataType Parser::parse_type() {
     if (match(lexer::TokenType::Int)) return DataType(DataType::Kind::Int);
     if (match(lexer::TokenType::Coroutine)) return DataType(DataType::Kind::Coroutine);
-    throw CompilerError("Expected type", m_filename, peek().line, peek().column);
+    const auto &err_token = peek();
+    throw CompilerError("Expected type", m_filename, err_token.line, err_token.column, (int)err_token.lexeme.size());
 }
 
 std::unique_ptr<Program> Parser::parse_program() {
@@ -45,7 +46,8 @@ std::unique_ptr<Program> Parser::parse_program() {
         if (match(lexer::TokenType::HashInclude)) {
             if (!match(lexer::TokenType::StringLiteral)) {
                 const auto &token = peek();
-                throw CompilerError("Expected string literal after '#include'", m_filename, token.line, token.column);
+                throw CompilerError("Expected string literal after '#include'", m_filename, token.line, token.column,
+                                    (int)token.lexeme.size());
             }
             std::string path(m_tokens[m_pos - 1].lexeme);
 
@@ -53,7 +55,8 @@ std::unique_ptr<Program> Parser::parse_program() {
             std::ifstream file(path);
             if (!file.is_open()) {
                 const auto &token = m_tokens[m_pos - 1];
-                throw CompilerError("Could not open included file: " + path, m_filename, token.line, token.column);
+                throw CompilerError("Could not open included file: " + path, m_filename, token.line, token.column,
+                                    (int)token.lexeme.size());
             }
             std::stringstream buffer;
             buffer << file.rdbuf();
@@ -79,7 +82,7 @@ std::unique_ptr<Function> Parser::parse_function() {
 
     if (!check(lexer::TokenType::Identifier)) {
         const auto &token = peek();
-        throw CompilerError("Expected function name", m_filename, token.line, token.column);
+        throw CompilerError("Expected function name", m_filename, token.line, token.column, (int)token.lexeme.size());
     }
     const auto &name_token = advance();
     auto name = name_token.lexeme;
@@ -95,7 +98,8 @@ std::unique_ptr<Function> Parser::parse_function() {
             DataType param_type = parse_type();
             if (!check(lexer::TokenType::Identifier)) {
                 const auto &token = peek();
-                throw CompilerError("Expected parameter name", m_filename, token.line, token.column);
+                throw CompilerError("Expected parameter name", m_filename, token.line, token.column,
+                                    (int)token.lexeme.size());
             }
             params.push_back({param_type, std::string(advance().lexeme)});
         } while (match(lexer::TokenType::Comma));
@@ -181,7 +185,8 @@ std::unique_ptr<Statement> Parser::parse_statement() {
         auto expr = parse_expression();
         if (!match(lexer::TokenType::Semicolon)) {
             const auto &token = peek();
-            throw CompilerError("Expected ';' after return", m_filename, token.line, token.column);
+            throw CompilerError("Expected ';' after return", m_filename, token.line, token.column,
+                                (int)token.lexeme.size());
         }
         return std::make_unique<ReturnStatement>(std::move(expr), m_filename, start_token.line, start_token.column);
     }
@@ -190,7 +195,8 @@ std::unique_ptr<Statement> Parser::parse_statement() {
         DataType type = parse_type();
         if (!check(lexer::TokenType::Identifier)) {
             const auto &token = peek();
-            throw CompilerError("Expected variable name after type", m_filename, token.line, token.column);
+            throw CompilerError("Expected variable name after type", m_filename, token.line, token.column,
+                                (int)token.lexeme.size());
         }
         const auto &name_token = advance();
         auto name = name_token.lexeme;
@@ -200,7 +206,8 @@ std::unique_ptr<Statement> Parser::parse_statement() {
         }
         if (!match(lexer::TokenType::Semicolon)) {
             const auto &token = peek();
-            throw CompilerError("Expected ';' after declaration", m_filename, token.line, token.column);
+            throw CompilerError("Expected ';' after declaration", m_filename, token.line, token.column,
+                                (int)token.lexeme.size());
         }
         return std::make_unique<VariableDeclaration>(type, std::string(name), name_token.line, name_token.column,
                                                      std::move(init), m_filename, start_token.line, start_token.column);
@@ -209,7 +216,8 @@ std::unique_ptr<Statement> Parser::parse_statement() {
     if (match(lexer::TokenType::Yield)) {
         if (!match(lexer::TokenType::Semicolon)) {
             const auto &token = peek();
-            throw CompilerError("Expected ';' after yield", m_filename, token.line, token.column);
+            throw CompilerError("Expected ';' after yield", m_filename, token.line, token.column,
+                                (int)token.lexeme.size());
         }
         return std::make_unique<YieldStatement>(m_filename, start_token.line, start_token.column);
     }
@@ -218,7 +226,8 @@ std::unique_ptr<Statement> Parser::parse_statement() {
     auto expr = parse_expression();
     if (!match(lexer::TokenType::Semicolon)) {
         const auto &token = peek();
-        throw CompilerError("Expected ';' after expression", m_filename, token.line, token.column);
+        throw CompilerError("Expected ';' after expression", m_filename, token.line, token.column,
+                            (int)token.lexeme.size());
     }
     return std::make_unique<ExpressionStatement>(std::move(expr), m_filename, start_token.line, start_token.column);
 }
@@ -367,7 +376,9 @@ std::unique_ptr<Expression> Parser::parse_primary() {
                 } while (match(lexer::TokenType::Comma));
             }
             if (!match(lexer::TokenType::RParent)) {
-                throw CompilerError("Expected ')' after arguments", m_filename, peek().line, peek().column);
+                const auto &err_tok = peek();
+                throw CompilerError("Expected ')' after arguments", m_filename, err_tok.line, err_tok.column,
+                                    (int)err_tok.lexeme.size());
             }
             return std::make_unique<FunctionCall>(std::move(name), std::move(args), m_filename, token.line,
                                                   token.column);
@@ -377,11 +388,15 @@ std::unique_ptr<Expression> Parser::parse_primary() {
     if (match(lexer::TokenType::LParent)) {
         auto expr = parse_expression();
         if (!match(lexer::TokenType::RParent)) {
-            throw CompilerError("Expected ')' after expression", m_filename, peek().line, peek().column);
+            const auto &err_tok = peek();
+            throw CompilerError("Expected ')' after expression", m_filename, err_tok.line, err_tok.column,
+                                (int)err_tok.lexeme.size());
         }
         return expr;
     }
-    throw CompilerError("Expected expression", m_filename, peek().line, peek().column);
+    const auto &err_token = peek();
+    throw CompilerError("Expected expression", m_filename, err_token.line, err_token.column,
+                        (int)err_token.lexeme.size());
 }
 
 }  // namespace ether::parser

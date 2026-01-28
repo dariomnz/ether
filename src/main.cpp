@@ -1,3 +1,5 @@
+#include <unistd.h>
+
 #include <algorithm>
 #include <chrono>
 #include <fstream>
@@ -17,13 +19,21 @@
 #include "test_runner/test_runner.hpp"
 #include "vm/vm.hpp"
 
+
 using Clock = std::chrono::high_resolution_clock;
 
 void report_error(const std::string &main_filename, const std::string &main_source, const ether::CompilerError &e) {
     std::string filename = e.filename();
     if (filename.empty()) filename = main_filename;
 
-    std::cerr << filename << ":" << e.line() << ":" << e.col() << ": error: " << e.what() << std::endl;
+    // ANSI Colors - only if stderr is a terminal
+    bool use_color = isatty(STDERR_FILENO);
+    const char *RED = use_color ? "\033[1;31m" : "";
+    const char *BOLD = use_color ? "\033[1m" : "";
+    const char *RESET = use_color ? "\033[0m" : "";
+
+    std::cerr << BOLD << filename << ":" << e.line() << ":" << e.col() << ": " << RED << "error: " << RESET << BOLD
+              << e.what() << RESET << std::endl;
 
     std::string source;
     if (filename == main_filename) {
@@ -44,12 +54,31 @@ void report_error(const std::string &main_filename, const std::string &main_sour
             if (!std::getline(ss, line)) break;
         }
 
-        std::cerr << "  " << line << std::endl;
+        // Highlight the erroneous part in the line itself
+        int col = e.col() - 1;  // 0-indexed
+        int len = e.length();
+
         std::cerr << "  ";
-        for (int i = 1; i < e.col(); ++i) {
+        if (col >= 0 && col < (int)line.size()) {
+            std::cerr << line.substr(0, col);
+            std::cerr << RED << line.substr(col, len) << RESET;
+            if (col + len < (int)line.size()) {
+                std::cerr << line.substr(col + len);
+            }
+        } else {
+            std::cerr << line;
+        }
+        std::cerr << std::endl;
+
+        std::cerr << "  ";
+        for (int i = 0; i < col; ++i) {
             std::cerr << " ";
         }
-        std::cerr << "^" << std::endl;
+        std::cerr << RED << "^";
+        for (int i = 1; i < len; ++i) {
+            std::cerr << "~";
+        }
+        std::cerr << RESET << std::endl;
     }
 }
 
