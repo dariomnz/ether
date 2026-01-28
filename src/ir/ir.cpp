@@ -76,11 +76,11 @@ std::ostream &operator<<(std::ostream &os, OpCode op) {
         case OpCode::PUSH_VARARGS:
             os << "PUSH_VARARGS";
             break;
-        case OpCode::SYS_PRINTF:
-            os << "SYS_PRINTF";
+        case OpCode::LOAD_GLOBAL:
+            os << "LOAD_GLOBAL";
             break;
-        case OpCode::HELPERS:
-            os << "HELPERS";
+        case OpCode::STORE_GLOBAL:
+            os << "STORE_GLOBAL";
             break;
     }
     return os;

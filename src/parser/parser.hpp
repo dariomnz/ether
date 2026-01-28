@@ -2,11 +2,11 @@
 #define ETHER_PARSER_HPP
 
 #include <memory>
-#include <optional>
+#include <string>
 #include <vector>
 
 #include "ast.hpp"
-#include "lexer/lexer.hpp"
+#include "lexer/token.hpp"
 
 namespace ether::parser {
 
@@ -26,6 +26,7 @@ class Parser {
     bool check(lexer::TokenType type) const;
 
     DataType parse_type();
+    void parse_top_level(Program &program);
     std::unique_ptr<Function> parse_function();
     std::unique_ptr<Block> parse_block();
     std::unique_ptr<Statement> parse_statement();

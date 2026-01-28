@@ -233,6 +233,10 @@ struct NodeFinder : public ASTVisitor {
             if (found) return;
             inc->accept(*this);
         }
+        for (auto& g : node.globals) {
+            if (found) return;
+            g->accept(*this);
+        }
         for (auto& f : node.functions) {
             if (found) return;
             f->accept(*this);
@@ -541,6 +545,7 @@ struct SemanticTokensVisitor : public ASTVisitor {
     SemanticTokensVisitor(std::string filename) : target_filename(std::move(filename)) {}
 
     void visit(Program& node) override {
+        for (auto& g : node.globals) g->accept(*this);
         for (auto& f : node.functions) f->accept(*this);
     }
 
@@ -561,6 +566,7 @@ struct SemanticTokensVisitor : public ASTVisitor {
     }
 
     void visit(VariableDeclaration& node) override {
+        if (node.filename != target_filename) return;
         // Variable name: type 1
         tokens.push_back({node.name_line, node.name_col, (int)node.name.size(), 1});
         if (node.init) node.init->accept(*this);

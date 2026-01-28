@@ -77,6 +77,7 @@ class VM {
    private:
     const ir::IRProgram& program_;
     std::vector<Coroutine> m_coroutines;
+    std::vector<Value> m_globals;
     size_t m_current_coro = 0;
     uint32_t m_next_coro_id = 1;
     std::unordered_map<uint32_t, Value> m_finished_coros;

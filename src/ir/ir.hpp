@@ -35,8 +35,8 @@ enum class OpCode : uint8_t {
     AWAIT,         // [uint8_t opcode] (1 byte)
     POP,           // [uint8_t opcode] (1 byte)
     PUSH_VARARGS,  // [uint8_t opcode] (1 byte)
-    SYS_PRINTF,    // [uint8_t opcode] [uint8_t num_args] (2 bytes)
-    HELPERS        // [uint8_t opcode] [uint8_t helper_id] (2 bytes)
+    LOAD_GLOBAL,   // [uint8_t opcode] [uint16_t slot] (3 bytes)
+    STORE_GLOBAL   // [uint8_t opcode] [uint16_t slot] (3 bytes)
 };
 
 struct IRProgram {
@@ -51,6 +51,7 @@ struct IRProgram {
     std::unordered_map<std::string, FunctionInfo> functions;
     std::unordered_map<size_t, FunctionInfo> addr_to_info;  // Fast lookup
     size_t main_addr = 0;
+    uint32_t num_globals = 0;
 };
 
 std::ostream &operator<<(std::ostream &os, OpCode op);

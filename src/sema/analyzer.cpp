@@ -7,6 +7,8 @@ namespace ether::sema {
 using namespace parser;
 
 void Analyzer::analyze(Program &program) {
+    push_scope();  // Global scope
+
     // Register built-ins
     m_functions["syscall"] = {DataType(DataType::Kind::Int), {}, true, "", 0, 0};
 
@@ -22,9 +24,14 @@ void Analyzer::analyze(Program &program) {
 
     // Second pass: analyze everything
     program.accept(*this);
+
+    pop_scope();
 }
 
 void Analyzer::visit(Program &node) {
+    for (const auto &global : node.globals) {
+        global->accept(*this);
+    }
     for (const auto &func : node.functions) {
         func->accept(*this);
     }
@@ -205,7 +212,8 @@ void Analyzer::push_scope() { m_scopes.emplace_back(); }
 void Analyzer::pop_scope() { m_scopes.pop_back(); }
 
 void Analyzer::define_variable(const std::string &name, DataType type, std::string filename, int line, int col) {
-    m_scopes.back().variables[name] = {type, std::move(filename), line, col};
+    bool is_global = (m_scopes.size() == 1);
+    m_scopes.back().variables[name] = {type, std::move(filename), line, col, is_global, 0};
 }
 
 DataType Analyzer::lookup_variable(const std::string &name, std::string filename, int line, int col) {

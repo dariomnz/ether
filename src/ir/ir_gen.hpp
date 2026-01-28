@@ -41,11 +41,13 @@ class IRGenerator : public parser::ASTVisitor {
 
     // Tracking for bytecode generation
     struct Symbol {
-        uint8_t slot;
+        uint16_t slot;
+        bool is_global = false;
     };
     struct Scope {
         std::unordered_map<std::string, Symbol> variables;
-        uint8_t next_slot = 0;
+        uint16_t next_slot = 0;
+        bool is_global = false;
     };
     std::vector<Scope> m_scopes;
 
@@ -54,9 +56,10 @@ class IRGenerator : public parser::ASTVisitor {
     void emit_opcode(ir::OpCode op) { emit_byte(static_cast<uint8_t>(op)); }
     void emit_int(int32_t val);
     void emit_uint32(uint32_t val);
+    void emit_uint16(uint16_t val);
 
     uint32_t get_string_id(const std::string &str);
-    uint8_t get_var_slot(const std::string &name);
+    Symbol get_var_symbol(const std::string &name);
     void define_var(const std::string &name);
 
     struct JumpPlaceholder {

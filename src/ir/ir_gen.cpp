@@ -9,22 +9,33 @@ namespace {
 struct DependencyTracker : public parser::ASTVisitor {
     std::unordered_set<std::string> reachable;
     const std::unordered_map<std::string, const parser::Function *> &all_funcs;
+    const std::unordered_map<std::string, const parser::VariableDeclaration *> &all_globals;
 
-    DependencyTracker(const std::unordered_map<std::string, const parser::Function *> &funcs) : all_funcs(funcs) {}
+    DependencyTracker(const std::unordered_map<std::string, const parser::Function *> &funcs,
+                      const std::unordered_map<std::string, const parser::VariableDeclaration *> &globals)
+        : all_funcs(funcs), all_globals(globals) {}
 
     void trace(const std::string &name) {
         if (name == "syscall") return;
         if (reachable.contains(name)) return;
         reachable.insert(name);
-        auto it = all_funcs.find(name);
-        if (it != all_funcs.end()) {
-            it->second->accept(*this);
+
+        auto it_f = all_funcs.find(name);
+        if (it_f != all_funcs.end()) {
+            it_f->second->accept(*this);
+        }
+
+        auto it_g = all_globals.find(name);
+        if (it_g != all_globals.end()) {
+            if (it_g->second->init) {
+                it_g->second->init->accept(*this);
+            }
         }
     }
 
     void visit(const parser::IntegerLiteral &) override {}
     void visit(const parser::StringLiteral &) override {}
-    void visit(const parser::VariableExpression &) override {}
+    void visit(const parser::VariableExpression &node) override { trace(node.name); }
     void visit(const parser::FunctionCall &node) override {
         trace(node.name);
         for (const auto &arg : node.args) arg->accept(*this);
@@ -53,6 +64,7 @@ struct DependencyTracker : public parser::ASTVisitor {
         if (node.call) node.call->accept(*this);
     }
     void visit(const parser::AssignmentExpression &node) override {
+        trace(node.lvalue->name);
         if (node.value) node.value->accept(*this);
     }
     void visit(const parser::IncrementExpression &node) override {
@@ -84,30 +96,64 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
     m_program.bytecode.clear();
     m_program.string_pool.clear();
     m_program.functions.clear();
+    m_program.addr_to_info.clear();
     m_call_patches.clear();
     m_reachable.clear();
+    m_scopes.clear();
 
-    // First pass: collect all function definitions
+    // 1. Dependency Tracking
     std::unordered_map<std::string, const parser::Function *> all_funcs;
     for (const auto &func : ast.functions) {
         all_funcs[func->name] = func.get();
     }
+    std::unordered_map<std::string, const parser::VariableDeclaration *> all_globals_map;
+    for (const auto &global : ast.globals) {
+        all_globals_map[global->name] = global.get();
+    }
 
-    // Trace dependencies starting from main
-    DependencyTracker tracker(all_funcs);
+    DependencyTracker tracker(all_funcs, all_globals_map);
     tracker.trace("main");
     m_reachable = std::move(tracker.reachable);
 
-    // Initial pass for reachable function signatures
+    // 2. Global Scope setup
+    m_scopes.push_back({{}, 0, true});
+
+    // Define ONLY reachable globals
+    for (const auto &global : ast.globals) {
+        if (m_reachable.contains(global->name)) {
+            define_var(global->name);
+        }
+    }
+    m_program.num_globals = m_scopes[0].next_slot;
+
     for (const auto &name : m_reachable) {
-        const auto *func = all_funcs.at(name);
-        m_program.functions[name] = {0, (uint8_t)func->params.size(), 0};
+        auto it = all_funcs.find(name);
+        if (it != all_funcs.end()) {
+            const auto *func = it->second;
+            m_program.functions[name] = {0, (uint8_t)func->params.size(), 0};
+        }
+    }
+    m_program.functions["syscall"] = {0xFFFFFFFF, 0, 0};
+
+    // 3. Entry point / Global initialization
+    m_program.main_addr = 0;
+    for (const auto &global : ast.globals) {
+        if (m_reachable.contains(global->name) && global->init) {
+            global->init->accept(*this);
+            Symbol s = get_var_symbol(global->name);
+            emit_opcode(ir::OpCode::STORE_GLOBAL);
+            emit_uint16(s.slot);
+        }
     }
 
-    // Register built-in native functions
-    m_program.functions["syscall"] = {0xFFFFFFFF, 5, 0};
+    // Call main and halt
+    emit_opcode(ir::OpCode::CALL);
+    m_call_patches.push_back({m_program.bytecode.size(), "main"});
+    emit_uint32(0);
+    emit_byte(0);  // main takes 0 args
+    emit_opcode(ir::OpCode::HALT);
 
-    // Second pass: generate code for reachable functions
+    // 4. Generate functions
     ast.accept(*this);
 
     emit_opcode(ir::OpCode::HALT);
@@ -128,7 +174,6 @@ void IRGenerator::visit(const parser::Program &node) {
     for (const auto &func : node.functions) {
         if (!m_reachable.contains(func->name)) continue;
         m_program.functions[func->name].entry_addr = m_program.bytecode.size();
-        if (func->name == "main") m_program.main_addr = m_program.bytecode.size();
         func->accept(*this);
     }
 }
@@ -202,8 +247,14 @@ void IRGenerator::visit(const parser::VariableDeclaration &node) {
         emit_int(0);
     }
     define_var(node.name);
-    emit_opcode(ir::OpCode::STORE_VAR);
-    emit_byte(get_var_slot(node.name));
+    Symbol s = get_var_symbol(node.name);
+    if (s.is_global) {
+        emit_opcode(ir::OpCode::STORE_GLOBAL);
+        emit_uint16(s.slot);
+    } else {
+        emit_opcode(ir::OpCode::STORE_VAR);
+        emit_byte((uint8_t)s.slot);
+    }
 }
 
 void IRGenerator::visit(const parser::ExpressionStatement &node) { node.expr->accept(*this); }
@@ -255,40 +306,84 @@ void IRGenerator::visit(const parser::IntegerLiteral &node) {
 }
 
 void IRGenerator::visit(const parser::VariableExpression &node) {
-    emit_opcode(ir::OpCode::LOAD_VAR);
-    emit_byte(get_var_slot(node.name));
+    Symbol s = get_var_symbol(node.name);
+    if (s.is_global) {
+        emit_opcode(ir::OpCode::LOAD_GLOBAL);
+        emit_uint16(s.slot);
+    } else {
+        emit_opcode(ir::OpCode::LOAD_VAR);
+        emit_byte((uint8_t)s.slot);
+    }
 }
 
 void IRGenerator::visit(const parser::AssignmentExpression &node) {
     node.value->accept(*this);
-    emit_opcode(ir::OpCode::STORE_VAR);
-    emit_byte(get_var_slot(node.lvalue->name));
+    Symbol s = get_var_symbol(node.lvalue->name);
+    if (s.is_global) {
+        emit_opcode(ir::OpCode::STORE_GLOBAL);
+        emit_uint16(s.slot);
+    } else {
+        emit_opcode(ir::OpCode::STORE_VAR);
+        emit_byte((uint8_t)s.slot);
+    }
 }
 
 void IRGenerator::visit(const parser::IncrementExpression &node) {
-    emit_opcode(ir::OpCode::LOAD_VAR);
-    emit_byte(get_var_slot(node.lvalue->name));
+    Symbol s = get_var_symbol(node.lvalue->name);
+    if (s.is_global) {
+        emit_opcode(ir::OpCode::LOAD_GLOBAL);
+        emit_uint16(s.slot);
+    } else {
+        emit_opcode(ir::OpCode::LOAD_VAR);
+        emit_byte((uint8_t)s.slot);
+    }
     emit_opcode(ir::OpCode::PUSH_INT);
     emit_int(1);
     emit_opcode(ir::OpCode::ADD);
-    emit_opcode(ir::OpCode::STORE_VAR);
-    emit_byte(get_var_slot(node.lvalue->name));
-    // Push result for expression consistency
-    emit_opcode(ir::OpCode::LOAD_VAR);
-    emit_byte(get_var_slot(node.lvalue->name));
+    if (s.is_global) {
+        emit_opcode(ir::OpCode::STORE_GLOBAL);
+        emit_uint16(s.slot);
+    } else {
+        emit_opcode(ir::OpCode::STORE_VAR);
+        emit_byte((uint8_t)s.slot);
+    }
+    // Push result
+    if (s.is_global) {
+        emit_opcode(ir::OpCode::LOAD_GLOBAL);
+        emit_uint16(s.slot);
+    } else {
+        emit_opcode(ir::OpCode::LOAD_VAR);
+        emit_byte((uint8_t)s.slot);
+    }
 }
 
 void IRGenerator::visit(const parser::DecrementExpression &node) {
-    emit_opcode(ir::OpCode::LOAD_VAR);
-    emit_byte(get_var_slot(node.lvalue->name));
+    Symbol s = get_var_symbol(node.lvalue->name);
+    if (s.is_global) {
+        emit_opcode(ir::OpCode::LOAD_GLOBAL);
+        emit_uint16(s.slot);
+    } else {
+        emit_opcode(ir::OpCode::LOAD_VAR);
+        emit_byte((uint8_t)s.slot);
+    }
     emit_opcode(ir::OpCode::PUSH_INT);
     emit_int(1);
     emit_opcode(ir::OpCode::SUB);
-    emit_opcode(ir::OpCode::STORE_VAR);
-    emit_byte(get_var_slot(node.lvalue->name));
-    // Push result for expression consistency
-    emit_opcode(ir::OpCode::LOAD_VAR);
-    emit_byte(get_var_slot(node.lvalue->name));
+    if (s.is_global) {
+        emit_opcode(ir::OpCode::STORE_GLOBAL);
+        emit_uint16(s.slot);
+    } else {
+        emit_opcode(ir::OpCode::STORE_VAR);
+        emit_byte((uint8_t)s.slot);
+    }
+    // Push result
+    if (s.is_global) {
+        emit_opcode(ir::OpCode::LOAD_GLOBAL);
+        emit_uint16(s.slot);
+    } else {
+        emit_opcode(ir::OpCode::LOAD_VAR);
+        emit_byte((uint8_t)s.slot);
+    }
 }
 
 void IRGenerator::visit(const parser::AwaitExpression &node) {
@@ -389,6 +484,12 @@ void IRGenerator::emit_uint32(uint32_t val) {
     for (int i = 0; i < 4; ++i) emit_byte(bytes[i]);
 }
 
+void IRGenerator::emit_uint16(uint16_t val) {
+    uint8_t bytes[2];
+    std::memcpy(bytes, &val, 2);
+    for (int i = 0; i < 2; ++i) emit_byte(bytes[i]);
+}
+
 uint32_t IRGenerator::get_string_id(const std::string &str) {
     for (uint32_t i = 0; i < m_program.string_pool.size(); ++i) {
         if (m_program.string_pool[i] == str) return i;
@@ -397,17 +498,18 @@ uint32_t IRGenerator::get_string_id(const std::string &str) {
     return (uint32_t)m_program.string_pool.size() - 1;
 }
 
-uint8_t IRGenerator::get_var_slot(const std::string &name) {
+IRGenerator::Symbol IRGenerator::get_var_symbol(const std::string &name) {
     for (auto it = m_scopes.rbegin(); it != m_scopes.rend(); ++it) {
-        if (it->variables.contains(name)) return it->variables.at(name).slot;
+        if (it->variables.contains(name)) return it->variables.at(name);
     }
     throw std::runtime_error("Undefined variable: " + name);
 }
 
 void IRGenerator::define_var(const std::string &name) {
     if (m_scopes.empty()) throw std::runtime_error("Variable defined outside scope");
-    uint8_t slot = m_scopes.back().next_slot++;
-    m_scopes.back().variables[name] = {slot};
+    auto &scope = m_scopes.back();
+    uint16_t slot = scope.next_slot++;
+    scope.variables[name] = {slot, scope.is_global};
 }
 
 IRGenerator::JumpPlaceholder IRGenerator::emit_jump(ir::OpCode op) {

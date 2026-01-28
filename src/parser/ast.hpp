@@ -313,6 +313,7 @@ struct Include : ASTNode {
 
 struct Program : ASTNode {
     std::vector<std::unique_ptr<Include>> includes;
+    std::vector<std::unique_ptr<VariableDeclaration>> globals;
     std::vector<std::unique_ptr<Function>> functions;
     Program() : ASTNode("", 0, 0) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }

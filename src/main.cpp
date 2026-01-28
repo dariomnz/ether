@@ -150,9 +150,21 @@ void disassemble(const ether::ir::IRProgram &program) {
                 std::cout << "slot " << (int)slot;
                 break;
             }
+            case ether::ir::OpCode::STORE_GLOBAL:
+            case ether::ir::OpCode::LOAD_GLOBAL: {
+                uint16_t slot = *(uint16_t *)&code[ip];
+                ip += 2;
+                std::cout << "global_slot " << (int)slot;
+                break;
+            }
             case ether::ir::OpCode::SYSCALL: {
                 uint8_t num_args = code[ip++];
-                std::cout << "args " << (int)num_args;
+                std::cout << "args ";
+                if (num_args & 0x80) {
+                    std::cout << (num_args & 0x7F) << " (variadic)";
+                } else {
+                    std::cout << (int)num_args;
+                }
                 break;
             }
             case ether::ir::OpCode::CALL:
@@ -160,7 +172,12 @@ void disassemble(const ether::ir::IRProgram &program) {
                 uint32_t target = *(uint32_t *)&code[ip];
                 ip += 4;
                 uint8_t num_args = code[ip++];
-                std::cout << "addr " << target << " args " << (int)num_args;
+                std::cout << "addr " << target << " args ";
+                if (num_args & 0x80) {
+                    std::cout << (num_args & 0x7F) << " (variadic)";
+                } else {
+                    std::cout << (int)num_args;
+                }
                 if (addr_to_func.contains(target)) {
                     std::cout << " <" << addr_to_func.at(target).first << ">";
                 }

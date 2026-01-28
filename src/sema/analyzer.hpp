@@ -40,6 +40,8 @@ class Analyzer : public parser::ASTVisitor {
         std::string filename;
         int line;
         int col;
+        bool is_global = false;
+        uint16_t slot = 0;
     };
 
     struct Scope {

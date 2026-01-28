@@ -13,6 +13,7 @@
 namespace ether::vm {
 
 VM::VM(const ir::IRProgram &program) : program_(program) {
+    m_globals.resize(program.num_globals, Value(0));
     // Initial coroutine for main
     Coroutine main_coro;
     main_coro.id = 0;  // Main is always ID 0
@@ -95,6 +96,7 @@ Value VM::run(bool collect_stats) {
 #define READ_BYTE()   code[CUR_CORO().ip++]
 #define READ_INT()    (*(int32_t *)&code[(CUR_CORO().ip += 4) - 4])
 #define READ_UINT32() (*(uint32_t *)&code[(CUR_CORO().ip += 4) - 4])
+#define READ_UINT16() (*(uint16_t *)&code[(CUR_CORO().ip += 2) - 2])
 
         // Execute instructions until yield or termination
         bool yielded = false;
@@ -138,6 +140,18 @@ Value VM::run(bool collect_stats) {
                     auto &call_stack = CUR_CORO().call_stack;
                     stack[call_stack.back().stack_base + slot] = stack.back();
                     stack.pop_back();
+                    break;
+                }
+
+                case ir::OpCode::LOAD_GLOBAL: {
+                    uint16_t slot = READ_UINT16();
+                    push(m_globals[slot]);
+                    break;
+                }
+
+                case ir::OpCode::STORE_GLOBAL: {
+                    uint16_t slot = READ_UINT16();
+                    m_globals[slot] = pop();
                     break;
                 }
 
@@ -186,6 +200,8 @@ Value VM::run(bool collect_stats) {
                         uint8_t num_varargs = frame.num_args_passed - frame.num_fixed_params;
                         num_args_passed = fixed + num_varargs;
                     }
+                    // std::cout << "DEBUG: SYSCALL " << (int)num_args_passed << " (ir=" << (int)ir_num_args << ")" <<
+                    // std::endl;
                     submit_syscall(CUR_CORO(), num_args_passed);
                     yielded = true;
                     break;

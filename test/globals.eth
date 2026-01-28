@@ -1,0 +1,12 @@
+// EXPECTED_OUTPUT: Global var: 42
+// EXPECTED_OUTPUT: Global var after assignment: 100
+#include "std/io.eth"
+
+int G_VAR = 42;
+
+int main() {
+    printf("Global var: %d\n", G_VAR);
+    G_VAR = 100;
+    printf("Global var after assignment: %d\n", G_VAR);
+    return 0;
+}

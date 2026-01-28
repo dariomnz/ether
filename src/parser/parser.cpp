@@ -48,50 +48,112 @@ std::unique_ptr<Program> Parser::parse_program() {
     auto program = std::make_unique<Program>();
     program->filename = m_filename;
     while (!check(lexer::TokenType::EOF_TOKEN)) {
-        if (match(lexer::TokenType::HashInclude)) {
-            const auto &include_token = m_tokens[m_pos - 1];
-            if (!match(lexer::TokenType::StringLiteral)) {
-                const auto &token = peek();
-                throw CompilerError("Expected string literal after '#include'", m_filename, token.line, token.column,
-                                    (int)token.lexeme.size());
-            }
-            const auto &path_token = m_tokens[m_pos - 1];
-            std::string path(path_token.lexeme);
-
-            // Resolve path relative to m_filename
-            fs::path current_dir = fs::path(m_filename).parent_path();
-            fs::path absolute_path = current_dir / path;
-            if (!fs::exists(absolute_path)) {
-                // Fallback to working directory relative
-                absolute_path = fs::absolute(path);
-            }
-            std::string resolved_path = absolute_path.lexically_normal().string();
-
-            program->includes.push_back(
-                std::make_unique<Include>(resolved_path, m_filename, include_token.line, include_token.column));
-
-            // Recursive parse
-            std::ifstream file(resolved_path);
-            if (!file.is_open()) {
-                throw CompilerError("Could not open included file: " + resolved_path, m_filename, path_token.line,
-                                    path_token.column, (int)path_token.lexeme.size());
-            }
-            std::stringstream buffer;
-            buffer << file.rdbuf();
-            std::string included_source = buffer.str();
-            lexer::Lexer imported_lexer(included_source, resolved_path);
-            auto imported_tokens = imported_lexer.tokenize();
-            Parser imported_parser(imported_tokens, resolved_path);
-            auto imported_prog = imported_parser.parse_program();
-
-            for (auto &f : imported_prog->functions) {
-                program->functions.push_back(std::move(f));
-            }
-        } else {
-            program->functions.push_back(parse_function());
-        }
+        parse_top_level(*program);
     }
     return program;
+}
+
+void Parser::parse_top_level(Program &program) {
+    if (match(lexer::TokenType::HashInclude)) {
+        const auto &include_token = m_tokens[m_pos - 1];
+        if (!match(lexer::TokenType::StringLiteral)) {
+            const auto &token = peek();
+            throw CompilerError("Expected string literal after '#include'", m_filename, token.line, token.column,
+                                (int)token.lexeme.size());
+        }
+        const auto &path_token = m_tokens[m_pos - 1];
+        std::string path(path_token.lexeme);
+
+        // Resolve path relative to m_filename
+        fs::path current_dir = fs::path(m_filename).parent_path();
+        fs::path absolute_path = current_dir / path;
+        if (!fs::exists(absolute_path)) {
+            // Fallback to working directory relative
+            absolute_path = fs::absolute(path);
+        }
+        std::string resolved_path = absolute_path.lexically_normal().string();
+
+        program.includes.push_back(
+            std::make_unique<Include>(resolved_path, m_filename, include_token.line, include_token.column));
+
+        // Recursive parse
+        std::ifstream file(resolved_path);
+        if (!file.is_open()) {
+            throw CompilerError("Could not open included file: " + resolved_path, m_filename, path_token.line,
+                                path_token.column, (int)path_token.lexeme.size());
+        }
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        std::string included_source = buffer.str();
+        lexer::Lexer imported_lexer(included_source, resolved_path);
+        auto imported_tokens = imported_lexer.tokenize();
+        Parser imported_parser(imported_tokens, resolved_path);
+        auto imported_prog = imported_parser.parse_program();
+
+        for (auto &g : imported_prog->globals) {
+            program.globals.push_back(std::move(g));
+        }
+        for (auto &f : imported_prog->functions) {
+            program.functions.push_back(std::move(f));
+        }
+        return;
+    }
+
+    const auto &start_token = peek();
+    DataType type = parse_type();
+
+    if (!check(lexer::TokenType::Identifier)) {
+        const auto &token = peek();
+        throw CompilerError("Expected name after type", m_filename, token.line, token.column, (int)token.lexeme.size());
+    }
+    const auto &name_token = advance();
+    auto name = name_token.lexeme;
+
+    if (check(lexer::TokenType::LParent)) {
+        advance();  // skip '('
+
+        std::vector<Parameter> params;
+        bool is_variadic = false;
+        if (!check(lexer::TokenType::RParent)) {
+            do {
+                if (match(lexer::TokenType::Ellipsis)) {
+                    is_variadic = true;
+                    break;
+                }
+                DataType param_type = parse_type();
+                if (!check(lexer::TokenType::Identifier)) {
+                    const auto &token = peek();
+                    throw CompilerError("Expected parameter name", m_filename, token.line, token.column,
+                                        (int)token.lexeme.size());
+                }
+                params.push_back({param_type, std::string(advance().lexeme)});
+            } while (match(lexer::TokenType::Comma));
+        }
+
+        if (!match(lexer::TokenType::RParent)) {
+            const auto &token = peek();
+            throw CompilerError("Expected ')' after parameters", m_filename, token.line, token.column);
+        }
+
+        auto body = parse_block();
+        program.functions.push_back(
+            std::make_unique<Function>(type, std::string(name), name_token.line, name_token.column, std::move(params),
+                                       is_variadic, std::move(body), m_filename, start_token.line, start_token.column));
+    } else {
+        // It's a global variable
+        std::unique_ptr<Expression> init = nullptr;
+        if (match(lexer::TokenType::Equal)) {
+            init = parse_expression();
+        }
+        if (!match(lexer::TokenType::Semicolon)) {
+            const auto &token = peek();
+            throw CompilerError("Expected ';' after global variable declaration", m_filename, token.line, token.column,
+                                (int)token.lexeme.size());
+        }
+        program.globals.push_back(std::make_unique<VariableDeclaration>(type, name, name_token.line, name_token.column,
+                                                                        std::move(init), m_filename, start_token.line,
+                                                                        start_token.column));
+    }
 }
 
 std::unique_ptr<Function> Parser::parse_function() {
