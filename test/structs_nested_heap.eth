@@ -4,14 +4,14 @@
 #include "std/io.eth"
 
 struct Inner {
-    int a;
-    int b;
+    i32 a;
+    i32 b;
 }
 
 struct Outer {
-    int x;
+    i32 x;
     Inner in;
-    int y;
+    i32 y;
 }
 
 void main() {

@@ -6,7 +6,7 @@ void my_log(string fmt, ...) {
     printf(fmt, ...);
 }
 
-int main() {
+i32 main() {
     my_log("Hello %d\n", 42);
     return 0;
 }

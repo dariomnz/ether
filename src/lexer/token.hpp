@@ -7,7 +7,10 @@ namespace ether::lexer {
 
 enum class TokenType {
     // Keywords
-    Int,
+    I64,
+    I32,
+    I16,
+    I8,
     Return,
     If,
     Else,

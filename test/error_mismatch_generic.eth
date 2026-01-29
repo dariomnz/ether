@@ -1,6 +1,6 @@
-// EXPECTED_OUTPUT: Type mismatch in variable declaration: expected int, but got coroutine(int)
-int main() {
-    coroutine(int) c = spawn main();
-    int x = c;
+// EXPECTED_OUTPUT: Type mismatch in variable declaration: expected i32, but got coroutine(i32)
+i32 main() {
+    coroutine(i32) c = spawn main();
+    i32 x = c;
     return 0;
 }

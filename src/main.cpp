@@ -133,10 +133,27 @@ void disassemble(const ether::ir::IRProgram &program) {
         std::cout << std::right << std::setw(4) << addr << ": " << std::left << std::setw(15) << op;
 
         switch (op) {
-            case ether::ir::OpCode::PUSH_INT: {
+            case ether::ir::OpCode::PUSH_I64: {
+                int64_t val = *(int64_t *)&code[ip];
+                ip += 8;
+                std::cout << val;
+                break;
+            }
+            case ether::ir::OpCode::PUSH_I32: {
                 int32_t val = *(int32_t *)&code[ip];
                 ip += 4;
                 std::cout << val;
+                break;
+            }
+            case ether::ir::OpCode::PUSH_I16: {
+                int16_t val = *(int16_t *)&code[ip];
+                ip += 2;
+                std::cout << val;
+                break;
+            }
+            case ether::ir::OpCode::PUSH_I8: {
+                int8_t val = (int8_t)code[ip++];
+                std::cout << (int)val;
                 break;
             }
             case ether::ir::OpCode::PUSH_STR: {

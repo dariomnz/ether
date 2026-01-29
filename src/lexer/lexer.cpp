@@ -11,11 +11,15 @@
 namespace ether::lexer {
 
 static const std::unordered_map<std::string_view, TokenType> keywords = {
-    {"int", TokenType::Int},       {"return", TokenType::Return},       {"if", TokenType::If},
-    {"else", TokenType::Else},     {"while", TokenType::While},         {"for", TokenType::For},
-    {"string", TokenType::String}, {"spawn", TokenType::Spawn},         {"yield", TokenType::Yield},
-    {"await", TokenType::Await},   {"coroutine", TokenType::Coroutine}, {"ptr", TokenType::Ptr},
-    {"void", TokenType::Void},     {"struct", TokenType::Struct},       {"sizeof", TokenType::Sizeof}};
+    {"i64", TokenType::I64},       {"i32", TokenType::I32},
+    {"i16", TokenType::I16},       {"i8", TokenType::I8},
+    {"return", TokenType::Return}, {"if", TokenType::If},
+    {"else", TokenType::Else},     {"while", TokenType::While},
+    {"for", TokenType::For},       {"string", TokenType::String},
+    {"spawn", TokenType::Spawn},   {"yield", TokenType::Yield},
+    {"await", TokenType::Await},   {"coroutine", TokenType::Coroutine},
+    {"ptr", TokenType::Ptr},       {"void", TokenType::Void},
+    {"struct", TokenType::Struct}, {"sizeof", TokenType::Sizeof}};
 
 Lexer::Lexer(std::string_view source, std::string filename) : m_source(source), m_filename(std::move(filename)) {}
 

@@ -123,7 +123,10 @@ Value VM::run(bool collect_stats) {
 
 #define CUR_CORO()    (*m_coroutines[m_current_coro])
 #define READ_BYTE()   code[CUR_CORO().ip++]
-#define READ_INT()    (*(int32_t *)&code[(CUR_CORO().ip += 4) - 4])
+#define READ_I64()    (*(int64_t *)&code[(CUR_CORO().ip += 8) - 8])
+#define READ_I32()    (*(int32_t *)&code[(CUR_CORO().ip += 4) - 4])
+#define READ_I16()    (*(int16_t *)&code[(CUR_CORO().ip += 2) - 2])
+#define READ_I8()     ((int8_t)code[CUR_CORO().ip++])
 #define READ_UINT32() (*(uint32_t *)&code[(CUR_CORO().ip += 4) - 4])
 #define READ_UINT16() (*(uint16_t *)&code[(CUR_CORO().ip += 2) - 2])
 
@@ -147,9 +150,20 @@ Value VM::run(bool collect_stats) {
             }
 
             switch (op) {
-                case ir::OpCode::PUSH_INT: {
-                    int32_t val = READ_INT();
-                    push(Value(val));
+                case ir::OpCode::PUSH_I64: {
+                    push(Value(READ_I64()));
+                    break;
+                }
+                case ir::OpCode::PUSH_I32: {
+                    push(Value(READ_I32()));
+                    break;
+                }
+                case ir::OpCode::PUSH_I16: {
+                    push(Value(READ_I16()));
+                    break;
+                }
+                case ir::OpCode::PUSH_I8: {
+                    push(Value(READ_I8()));
                     break;
                 }
 
@@ -189,29 +203,29 @@ Value VM::run(bool collect_stats) {
                 }
 
                 case ir::OpCode::ADD: {
-                    int32_t b = pop().as.i32;
-                    int32_t a = pop().as.i32;
+                    int64_t b = pop().i64_value();
+                    int64_t a = pop().i64_value();
                     push(Value(a + b));
                     break;
                 }
 
                 case ir::OpCode::SUB: {
-                    int32_t b = pop().as.i32;
-                    int32_t a = pop().as.i32;
+                    int64_t b = pop().i64_value();
+                    int64_t a = pop().i64_value();
                     push(Value(a - b));
                     break;
                 }
 
                 case ir::OpCode::MUL: {
-                    int32_t b = pop().as.i32;
-                    int32_t a = pop().as.i32;
+                    int64_t b = pop().i64_value();
+                    int64_t a = pop().i64_value();
                     push(Value(a * b));
                     break;
                 }
 
                 case ir::OpCode::DIV: {
-                    int32_t b = pop().as.i32;
-                    int32_t a = pop().as.i32;
+                    int64_t b = pop().i64_value();
+                    int64_t a = pop().i64_value();
                     push(Value(a / b));
                     break;
                 }
@@ -292,7 +306,7 @@ Value VM::run(bool collect_stats) {
                 }
 
                 case ir::OpCode::JZ: {
-                    int32_t condition = pop().as.i32;
+                    int64_t condition = pop().i64_value();
                     uint32_t target = READ_UINT32();
                     if (condition == 0) {
                         CUR_CORO().ip = target;
@@ -301,36 +315,36 @@ Value VM::run(bool collect_stats) {
                 }
 
                 case ir::OpCode::CMP_EQ: {
-                    int32_t b = pop().as.i32;
-                    int32_t a = pop().as.i32;
+                    int64_t b = pop().i64_value();
+                    int64_t a = pop().i64_value();
                     push(Value(a == b ? 1 : 0));
                     break;
                 }
 
                 case ir::OpCode::CMP_LE: {
-                    int32_t b = pop().as.i32;
-                    int32_t a = pop().as.i32;
+                    int64_t b = pop().i64_value();
+                    int64_t a = pop().i64_value();
                     push(Value(a <= b ? 1 : 0));
                     break;
                 }
 
                 case ir::OpCode::CMP_LT: {
-                    int32_t b = pop().as.i32;
-                    int32_t a = pop().as.i32;
+                    int64_t b = pop().i64_value();
+                    int64_t a = pop().i64_value();
                     push(Value(a < b ? 1 : 0));
                     break;
                 }
 
                 case ir::OpCode::CMP_GT: {
-                    int32_t b = pop().as.i32;
-                    int32_t a = pop().as.i32;
+                    int64_t b = pop().i64_value();
+                    int64_t a = pop().i64_value();
                     push(Value(a > b ? 1 : 0));
                     break;
                 }
 
                 case ir::OpCode::CMP_GE: {
-                    int32_t b = pop().as.i32;
-                    int32_t a = pop().as.i32;
+                    int64_t b = pop().i64_value();
+                    int64_t a = pop().i64_value();
                     push(Value(a >= b ? 1 : 0));
                     break;
                 }
@@ -385,7 +399,7 @@ Value VM::run(bool collect_stats) {
                 }
 
                 case ir::OpCode::AWAIT: {
-                    int32_t target_id = pop().as.i32;
+                    int32_t target_id = (int32_t)pop().i64_value();
                     if (m_finished_coros.contains((uint32_t)target_id)) {
                         push(m_finished_coros[(uint32_t)target_id]);
                         m_finished_coros.erase((uint32_t)target_id);
@@ -491,7 +505,7 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
         return;
     }
 
-    int32_t id = args[0].as.i32;
+    int64_t id = args[0].i64_value();
 
     switch (id) {
         case 10: {  // PRINTF
@@ -505,8 +519,10 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
                 if (fmt[i] == '%' && i + 1 < fmt.size()) {
                     i++;
                     if (fmt[i] == 'd') {
-                        if (arg_idx < args.size() && args[arg_idx].type == ValueType::Int) {
-                            std::cout << args[arg_idx++].as.i32;
+                        if (arg_idx < args.size() &&
+                            (args[arg_idx].type == ValueType::I64 || args[arg_idx].type == ValueType::I32 ||
+                             args[arg_idx].type == ValueType::I16 || args[arg_idx].type == ValueType::I8)) {
+                            std::cout << args[arg_idx++].i64_value();
                         } else {
                             std::cout << "%d";
                         }
@@ -543,7 +559,7 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
         }
 
         case 11: {  // MALLOC
-            int32_t size = args[1].as.i32;
+            int32_t size = (int32_t)args[1].i64_value();
             void *ptr = malloc(size);
             Value res;
             res.type = ValueType::Ptr;
@@ -575,32 +591,32 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
     switch (id) {
         case 0: {  // OPEN
             const char *path = args[2].as.str;
-            int flags = args[3].as.i32;
-            int mode = args[4].as.i32;
+            int flags = (int)args[3].i64_value();
+            int mode = (int)args[4].i64_value();
             io_uring_prep_openat(sqe, AT_FDCWD, path, flags, mode);
             break;
         }
         case 1: {  // READ
-            int fd = args[1].as.i32;
+            int fd = (int)args[1].i64_value();
             void *buf = args[2].as.ptr;
-            int size = args[3].as.i32;
+            int size = (int)args[3].i64_value();
             io_uring_prep_read(sqe, fd, buf, size, 0);
             break;
         }
         case 2: {  // WRITE
-            int fd = args[1].as.i32;
+            int fd = (int)args[1].i64_value();
             const char *buf = (args[2].type == ValueType::String) ? args[2].as.str : (const char *)args[2].as.ptr;
-            int size = args[3].as.i32;
+            int size = (int)args[3].i64_value();
             io_uring_prep_write(sqe, fd, buf, size, 0);
             break;
         }
         case 3: {  // CLOSE
-            int fd = args[1].as.i32;
+            int fd = (int)args[1].i64_value();
             io_uring_prep_close(sqe, fd);
             break;
         }
         case 4: {  // SLEEP
-            int32_t ms = args[1].as.i32;
+            int32_t ms = (int32_t)args[1].i64_value();
             coro.timeout.tv_sec = ms / 1000;
             coro.timeout.tv_nsec = (ms % 1000) * 1000000;
             io_uring_prep_timeout(sqe, &coro.timeout, 0, 0);

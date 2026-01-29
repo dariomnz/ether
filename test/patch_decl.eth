@@ -1,12 +1,12 @@
 // EXPECTED_OUTPUT: 42
 #include "std/io.eth"
 
-int main() {
+i32 main() {
     p_int(42);
     return 0;
 }
 
-int p_int(int x) {
+i32 p_int(i32 x) {
     printf("%d\n", x);
     return x;
 }

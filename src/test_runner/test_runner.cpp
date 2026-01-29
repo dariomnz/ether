@@ -23,7 +23,7 @@ namespace ether {
 
 struct TestCase {
     fs::path path;
-    std::optional<int> expected_result;
+    std::optional<int64_t> expected_result;
     std::vector<std::string> expected_outputs;
     std::vector<std::string> not_expected_outputs;
     std::string args;
@@ -84,7 +84,7 @@ TestResult perform_test(const std::string& ether_bin, const TestCase& tc) {
             if (pos != std::string::npos) {
                 size_t start_pos = pos + marker.length();
                 size_t end_pos = output.find_first_not_of("-0123456789", start_pos);
-                int actual_result = std::stoi(output.substr(start_pos, end_pos - start_pos));
+                int64_t actual_result = std::stoll(output.substr(start_pos, end_pos - start_pos));
                 if (actual_result != *tc.expected_result) {
                     errors.push_back("Expected result " + std::to_string(*tc.expected_result) + ", got " +
                                      std::to_string(actual_result));
@@ -145,7 +145,7 @@ int run_tests(const std::string& ether_bin, const std::string& test_path, const 
                     std::string val = line.substr(pos + res_marker.length());
                     val.erase(0, val.find_first_not_of(" \t"));
                     val.erase(val.find_last_not_of(" \t") + 1);
-                    if (!val.empty()) tc.expected_result = std::stoi(val);
+                    if (!val.empty()) tc.expected_result = std::stoll(val);
                 } else if (size_t pos = line.find(out_marker); pos != std::string::npos) {
                     std::string val = line.substr(pos + out_marker.length());
                     val.erase(0, val.find_first_not_of(" \t"));

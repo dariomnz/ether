@@ -2,8 +2,8 @@
 // EXPECTED_OUTPUT: <function: worker>
 // EXPECTED_OUTPUT: <function: main>
 
-int worker() { return 0; }
-int main() {
+i32 worker() { return 0; }
+i32 main() {
     spawn worker();
     return 0;
 }

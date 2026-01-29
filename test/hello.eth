@@ -1,7 +1,7 @@
 // EXPECTED_OUTPUT: Hello, World!
 #include "std/io.eth"
 
-int main() {
+i32 main() {
     printf("Hello, World!\n");
     return 0;
 }

@@ -2,14 +2,14 @@
 #include "std/io.eth"
 
 // Recursive function to calculate Fibonacci
-int fibonacci(int n) {
+i32 fibonacci(i32 n) {
     if (n <= 1) {
         return n;
     }
     return fibonacci(n - 1) + fibonacci(n - 2);
 }
 
-int main() {
-    int fib = fibonacci(20);
+i32 main() {
+    i32 fib = fibonacci(20);
     return fib;
 }

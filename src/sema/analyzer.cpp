@@ -10,7 +10,7 @@ void Analyzer::analyze(Program &program) {
     push_scope();  // Global scope
 
     // Register built-ins
-    m_functions["syscall"] = {DataType(DataType::Kind::Int), {}, true, "", 0, 0};
+    m_functions["syscall"] = {DataType(DataType::Kind::I64), {}, true, "", 0, 0};
 
     // First pass: collect struct definitions
     for (const auto &str : program.structs) {
@@ -84,10 +84,10 @@ void Analyzer::visit(VariableDeclaration &node) {
         node.init->accept(*this);
         DataType init_type = m_current_type;
         if (!(init_type == node.type)) {
-            // Allow assigning 0 to pointers
-            bool is_null_ptr = (node.type.kind == DataType::Kind::Ptr && init_type.kind == DataType::Kind::Int);
+            bool is_null_ptr = (node.type.kind == DataType::Kind::Ptr && init_type.is_integer());
             bool is_ptr_cast = (node.type.kind == DataType::Kind::Ptr && init_type.kind == DataType::Kind::Ptr);
-            if (!is_null_ptr && !is_ptr_cast) {
+            bool is_int_conv = (node.type.is_integer() && init_type.is_integer());
+            if (!is_null_ptr && !is_ptr_cast && !is_int_conv) {
                 throw CompilerError("Type mismatch in variable declaration: expected " + node.type.to_string() +
                                         ", but got " + init_type.to_string(),
                                     node.filename, node.line, node.column, node.length);
@@ -119,7 +119,7 @@ void Analyzer::visit(YieldStatement &node) {
 }
 
 void Analyzer::visit(IntegerLiteral &node) {
-    m_current_type = DataType(DataType::Kind::Int);
+    m_current_type = DataType(DataType::Kind::I32);
     node.type = std::make_unique<DataType>(m_current_type);
 }
 
@@ -146,14 +146,18 @@ void Analyzer::visit(BinaryExpression &node) {
     node.right->accept(*this);
     DataType right = m_current_type;
 
-    bool left_ok = left.kind == DataType::Kind::Int || left.kind == DataType::Kind::Ptr;
-    bool right_ok = right.kind == DataType::Kind::Int || right.kind == DataType::Kind::Ptr;
+    bool left_ok = left.kind == DataType::Kind::I64 || left.kind == DataType::Kind::I32 ||
+                   left.kind == DataType::Kind::I16 || left.kind == DataType::Kind::I8 ||
+                   left.kind == DataType::Kind::Ptr;
+    bool right_ok = right.kind == DataType::Kind::I64 || right.kind == DataType::Kind::I32 ||
+                    right.kind == DataType::Kind::I16 || right.kind == DataType::Kind::I8 ||
+                    right.kind == DataType::Kind::Ptr;
 
     if (!left_ok || !right_ok) {
         throw CompilerError("Binary operations are only supported for integers and pointers", node.filename, node.line,
                             node.column, node.length);
     }
-    m_current_type = DataType(DataType::Kind::Int);
+    m_current_type = left;  // For now binary op type is the left type
     node.type = std::make_unique<DataType>(m_current_type);
 }
 
@@ -187,8 +191,8 @@ void Analyzer::visit(FunctionCall &node) {
 
 void Analyzer::visit(VarargExpression &node) {
     // ellipsis can only appear in calls, and their type is effectively "multiple"
-    // for now we just mark current type as int so it doesn't crash
-    m_current_type = DataType(DataType::Kind::Int);
+    // for now we just mark current type as i32 so it doesn't crash
+    m_current_type = DataType(DataType::Kind::I32);
 }
 
 void Analyzer::visit(SpawnExpression &node) {
@@ -208,7 +212,7 @@ void Analyzer::visit(AwaitExpression &node) {
     if (target_type.inner) {
         m_current_type = *target_type.inner;
     } else {
-        m_current_type = DataType(DataType::Kind::Int);  // Fallback
+        m_current_type = DataType(DataType::Kind::I32);  // Fallback
     }
     node.type = std::make_unique<DataType>(m_current_type);
 }
@@ -220,9 +224,10 @@ void Analyzer::visit(AssignmentExpression &node) {
     DataType lval_type = m_current_type;
 
     if (!(val_type == lval_type)) {
-        bool is_null_ptr = (lval_type.kind == DataType::Kind::Ptr && val_type.kind == DataType::Kind::Int);
+        bool is_null_ptr = (lval_type.kind == DataType::Kind::Ptr && val_type.is_integer());
         bool is_ptr_cast = (lval_type.kind == DataType::Kind::Ptr && val_type.kind == DataType::Kind::Ptr);
-        if (!is_null_ptr && !is_ptr_cast) {
+        bool is_int_conv = (lval_type.is_integer() && val_type.is_integer());
+        if (!is_null_ptr && !is_ptr_cast && !is_int_conv) {
             throw CompilerError(
                 "Type mismatch in assignment: expected " + lval_type.to_string() + ", but got " + val_type.to_string(),
                 node.filename, node.line, node.column, node.length);
@@ -318,7 +323,7 @@ void Analyzer::visit(MemberAccessExpression &node) {
 }
 
 void Analyzer::visit(SizeofExpression &node) {
-    m_current_type = DataType(DataType::Kind::Int);
+    m_current_type = DataType(DataType::Kind::I32);
     node.type = std::make_unique<DataType>(m_current_type);
 }
 

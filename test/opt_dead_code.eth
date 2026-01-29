@@ -3,11 +3,11 @@
 // NOT_EXPECTED_OUTPUT: <function: unused_func>
 #include "std/io.eth"
 
-int unused_func() {
+i32 unused_func() {
     return 42;
 }
 
-int main() {
+i32 main() {
     printf("Reachable\n");
     return 0;
 }

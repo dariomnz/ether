@@ -1,25 +1,25 @@
 #include "std/io.eth"
 
-int producer(int val) {
+i32 producer(i32 val) {
     return val * 2;
 }
 
-coroutine(int) get_co(int v) {
+coroutine(i32) get_co(i32 v) {
     return spawn producer(v);
 }
 
-int main() {
-    // Test 1: coroutine(int)
-    coroutine(int) c1 = get_co(21);
-    int res = await c1;
+i32 main() {
+    // Test 1: coroutine(i32)
+    coroutine(i32) c1 = get_co(21);
+    i32 res = await c1;
     printf("Result: %d\n", res); // EXPECTED_OUTPUT: Result: 42
 
-    // Test 2: ptr(int)
-    ptr(int) p = malloc(4);
+    // Test 2: ptr(i32)
+    ptr(i32) p = malloc(4);
     free(p);
     
     // Test 3: nested generics (syntax check)
-    // coroutine(ptr(int)) c2; // Not fully supported yet by VM but syntax should work
+    // coroutine(ptr(i32)) c2; // Not fully supported yet by VM but syntax should work
     
     return 0;
 }

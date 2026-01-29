@@ -5,11 +5,11 @@
 // NOT_EXPECTED_OUTPUT: <function: unused>
 #include "std/io.eth"
 
-int leaf() { return 1; }
-int middle() { return leaf(); }
-int unused() { return middle(); }
+i32 leaf() { return 1; }
+i32 middle() { return leaf(); }
+i32 unused() { return middle(); }
 
-int main() {
+i32 main() {
     printf("%d\n", middle());
     return 0;
 }

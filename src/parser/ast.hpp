@@ -95,12 +95,12 @@ struct ASTNode {
 };
 
 struct DataType {
-    enum class Kind { Int, Coroutine, Void, Ptr, String, Struct };
+    enum class Kind { I64, I32, I16, I8, Coroutine, Void, Ptr, String, Struct };
     Kind kind;
     std::string struct_name;  // Only for Kind::Struct
     std::shared_ptr<DataType> inner;
 
-    DataType() : kind(Kind::Int), inner(nullptr) {}
+    DataType() : kind(Kind::I32), inner(nullptr) {}
     explicit DataType(Kind k, std::shared_ptr<DataType> i = nullptr) : kind(k), inner(i) {}
     DataType(Kind k, std::string name) : kind(k), struct_name(std::move(name)), inner(nullptr) {}
 
@@ -111,6 +111,8 @@ struct DataType {
         return !inner && !other.inner;
     }
 
+    bool is_integer() const { return kind == Kind::I64 || kind == Kind::I32 || kind == Kind::I16 || kind == Kind::I8; }
+
     friend std::ostream& operator<<(std::ostream& os, const DataType& type) {
         os << type.to_string();
         return os;
@@ -119,8 +121,17 @@ struct DataType {
     std::string to_string() const {
         std::string s;
         switch (kind) {
-            case Kind::Int:
-                s = "int";
+            case Kind::I64:
+                s = "i64";
+                break;
+            case Kind::I32:
+                s = "i32";
+                break;
+            case Kind::I16:
+                s = "i16";
+                break;
+            case Kind::I8:
+                s = "i8";
                 break;
             case Kind::Coroutine:
                 s = "coroutine";
@@ -154,8 +165,9 @@ struct Statement : ASTNode {
 };
 
 struct IntegerLiteral : Expression {
-    int value;
-    IntegerLiteral(int val, std::string fn, int l, int c, int len) : Expression(std::move(fn), l, c, len), value(val) {}
+    int64_t value;
+    IntegerLiteral(int64_t val, std::string fn, int l, int c, int len)
+        : Expression(std::move(fn), l, c, len), value(val) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
     void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };

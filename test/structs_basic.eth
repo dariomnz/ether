@@ -4,8 +4,8 @@
 
 // Basic struct test
 struct Point {
-    int x;
-    int y;
+    i32 x;
+    i32 y;
 }
 
 void main() {

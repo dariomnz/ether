@@ -2,8 +2,8 @@
 // EXPECTED_RESULT: 0
 #include "std/io.eth"
 
-int main() {
-    ptr(int) p = malloc(100);
+i32 main() {
+    ptr(i32) p = malloc(100);
     printf("Get from malloc: %p\n", p);
     if (p == 0) {
         return 1;

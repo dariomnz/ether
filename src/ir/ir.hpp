@@ -11,7 +11,10 @@
 namespace ether::ir {
 
 enum class OpCode : uint8_t {
-    PUSH_INT,         // [uint8_t opcode] [int32_t value] (5 bytes)
+    PUSH_I64,         // [uint8_t opcode] [int64_t value] (9 bytes)
+    PUSH_I32,         // [uint8_t opcode] [int32_t value] (5 bytes)
+    PUSH_I16,         // [uint8_t opcode] [int16_t value] (3 bytes)
+    PUSH_I8,          // [uint8_t opcode] [int8_t value] (2 bytes)
     LOAD_VAR,         // [uint8_t opcode] [uint8_t slot] (2 bytes)
     STORE_VAR,        // [uint8_t opcode] [uint8_t slot] (2 bytes)
     ADD,              // [uint8_t opcode] (1 byte)

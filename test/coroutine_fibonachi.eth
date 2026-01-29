@@ -1,0 +1,30 @@
+// EXPECTED_RESULT: 2880067194370816120
+#include "std/io.eth"
+
+i64 fib_val = 0;
+
+i64 fibonacci(i32 n) {
+    i64 a = 0;
+    i64 b = 1;
+
+    for (i64 i = 0; i <= n; i++) {
+        fib_val = a;
+        i64 next_step = a + b;
+        a = b;
+        b = next_step;
+        yield;
+    }
+    return fib_val;
+}
+
+i64 main() {
+    i32 iterations = 90;
+    coroutine(i64) fib = spawn fibonacci(iterations);
+    for (i64 i = 0; i < iterations; i++) {
+        printf("Fib %d: %d\n", i, fib_val);
+        yield;
+    }
+    await fib;
+    printf("Final: %d\n", fib_val);
+    return fib_val;
+}

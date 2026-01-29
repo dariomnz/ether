@@ -11,23 +11,23 @@
 
 #include "std/io.eth"
 
-int task(int id, int ms) {
+i32 task(i32 id, i32 ms) {
     printf("Sleeping for %dms...\n", ms);
     await co_sleep(ms);
     printf("Done sleeping %dms\n", ms);
     return id;
 }
 
-int main() {
+i32 main() {
     printf("Starting sleep test...\n");
     
-    coroutine(int) t1 = spawn task(1, 1);
-    coroutine(int) t2 = spawn task(2, 50);
+    coroutine(i32) t1 = spawn task(1, 1);
+    coroutine(i32) t2 = spawn task(2, 50);
 
     printf("Waiting for tasks...\n");
-    int res1 = await t1;
+    i32 res1 = await t1;
     printf("Task 1 result: %d\n", res1);
-    int res2 = await t2;
+    i32 res2 = await t2;
     printf("Task 2 result: %d\n", res2);
     
     printf("All done!\n");

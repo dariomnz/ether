@@ -14,16 +14,16 @@
 // EXPECTED_RESULT: 0
 #include "std/io.eth"
 
-int main() {
+i32 main() {
     // Variable declarations and initialization
-    int number = 5;    // The number we want the table for
-    int range = 10;  // How far the table goes
-    int result;
+    i32 number = 5;    // The number we want the table for
+    i32 range = 10;  // How far the table goes
+    i32 result;
 
     printf("--- Multiplication Table of %d ---\n", number);
 
     // Loop to calculate and display each row
-    for (int i = 1; i <= range; i++) {
+    for (i32 i = 1; i <= range; i++) {
         result = number * i;
 
         // Output format: "5 x 1 = 5"

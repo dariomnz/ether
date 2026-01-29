@@ -4,8 +4,17 @@ namespace ether::ir {
 
 std::ostream &operator<<(std::ostream &os, OpCode op) {
     switch (op) {
-        case OpCode::PUSH_INT:
-            os << "PUSH_INT";
+        case OpCode::PUSH_I64:
+            os << "PUSH_I64";
+            break;
+        case OpCode::PUSH_I32:
+            os << "PUSH_I32";
+            break;
+        case OpCode::PUSH_I16:
+            os << "PUSH_I16";
+            break;
+        case OpCode::PUSH_I8:
+            os << "PUSH_I8";
             break;
         case OpCode::LOAD_VAR:
             os << "LOAD_VAR";
@@ -81,6 +90,12 @@ std::ostream &operator<<(std::ostream &os, OpCode op) {
             break;
         case OpCode::STORE_GLOBAL:
             os << "STORE_GLOBAL";
+            break;
+        case OpCode::LOAD_PTR_OFFSET:
+            os << "LOAD_PTR_OFFSET";
+            break;
+        case OpCode::STORE_PTR_OFFSET:
+            os << "STORE_PTR_OFFSET";
             break;
     }
     return os;

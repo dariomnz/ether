@@ -62,7 +62,10 @@ class IRGenerator : public parser::ASTVisitor {
     // Helpers
     void emit_byte(uint8_t byte) { m_program.bytecode.push_back(byte); }
     void emit_opcode(ir::OpCode op) { emit_byte(static_cast<uint8_t>(op)); }
-    void emit_int(int32_t val);
+    void emit_int64(int64_t val);
+    void emit_int32(int32_t val);
+    void emit_int16(int16_t val);
+    void emit_int8(int8_t val);
     void emit_uint32(uint32_t val);
     void emit_uint16(uint16_t val);
 

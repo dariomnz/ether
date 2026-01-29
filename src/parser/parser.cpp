@@ -37,8 +37,14 @@ bool Parser::match(lexer::TokenType type) {
 
 DataType Parser::parse_type() {
     DataType::Kind kind;
-    if (match(lexer::TokenType::Int))
-        kind = DataType::Kind::Int;
+    if (match(lexer::TokenType::I64))
+        kind = DataType::Kind::I64;
+    else if (match(lexer::TokenType::I32))
+        kind = DataType::Kind::I32;
+    else if (match(lexer::TokenType::I16))
+        kind = DataType::Kind::I16;
+    else if (match(lexer::TokenType::I8))
+        kind = DataType::Kind::I8;
     else if (match(lexer::TokenType::Coroutine))
         kind = DataType::Kind::Coroutine;
     else if (match(lexer::TokenType::Ptr))
@@ -330,7 +336,8 @@ std::unique_ptr<Statement> Parser::parse_statement() {
                                                  len);
     }
 
-    if (check(lexer::TokenType::Int) || check(lexer::TokenType::Coroutine) || check(lexer::TokenType::Ptr) ||
+    if (check(lexer::TokenType::I64) || check(lexer::TokenType::I32) || check(lexer::TokenType::I16) ||
+        check(lexer::TokenType::I8) || check(lexer::TokenType::Coroutine) || check(lexer::TokenType::Ptr) ||
         check(lexer::TokenType::Void) || check(lexer::TokenType::String) || check(lexer::TokenType::Struct) ||
         (check(lexer::TokenType::Identifier) && m_pos + 1 < m_tokens.size() &&
          m_tokens[m_pos + 1].type == lexer::TokenType::Identifier)) {
@@ -552,7 +559,7 @@ std::unique_ptr<Expression> Parser::parse_primary() {
     }
     if (match(lexer::TokenType::IntegerLiteral)) {
         const auto &tok = m_tokens[m_pos - 1];
-        int val = std::stoi(std::string(tok.lexeme));
+        int64_t val = std::stoll(std::string(tok.lexeme));
         return std::make_unique<IntegerLiteral>(val, m_filename, token.line, token.column, (int)tok.lexeme.size());
     }
     if (match(lexer::TokenType::StringLiteral)) {

@@ -1,6 +1,6 @@
 // EXPECTED_RESULT: 25
-int main() {
-    int a = 5;
-    int b = 10;
+i32 main() {
+    i32 a = 5;
+    i32 b = 10;
     return a + b * 2;
 }

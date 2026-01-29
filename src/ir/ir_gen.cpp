@@ -222,8 +222,8 @@ uint32_t IRGenerator::get_type_size(const parser::DataType &type) {
 }
 
 void IRGenerator::visit(const parser::SizeofExpression &node) {
-    emit_opcode(ir::OpCode::PUSH_INT);
-    emit_int(get_type_size(node.target_type));
+    emit_opcode(ir::OpCode::PUSH_I32);
+    emit_int32(get_type_size(node.target_type));
 }
 
 void IRGenerator::visit(const parser::MemberAccessExpression &node) {
@@ -335,8 +335,8 @@ void IRGenerator::visit(const parser::Function &func) {
     };
 
     if (!ends_with_ret(*func.body)) {
-        emit_opcode(ir::OpCode::PUSH_INT);
-        emit_int(0);
+        emit_opcode(ir::OpCode::PUSH_I32);
+        emit_int32(0);
         emit_opcode(ir::OpCode::RET);
     }
 
@@ -421,8 +421,19 @@ void IRGenerator::visit(const parser::ForStatement &node) {
 void IRGenerator::visit(const parser::YieldStatement &node) { emit_opcode(ir::OpCode::YIELD); }
 
 void IRGenerator::visit(const parser::IntegerLiteral &node) {
-    emit_opcode(ir::OpCode::PUSH_INT);
-    emit_int(node.value);
+    if (node.type && node.type->kind == parser::DataType::Kind::I64) {
+        emit_opcode(ir::OpCode::PUSH_I64);
+        emit_int64(node.value);
+    } else if (node.type && node.type->kind == parser::DataType::Kind::I16) {
+        emit_opcode(ir::OpCode::PUSH_I16);
+        emit_int16((int16_t)node.value);
+    } else if (node.type && node.type->kind == parser::DataType::Kind::I8) {
+        emit_opcode(ir::OpCode::PUSH_I8);
+        emit_int8((int8_t)node.value);
+    } else {
+        emit_opcode(ir::OpCode::PUSH_I32);
+        emit_int32((int32_t)node.value);
+    }
 }
 
 void IRGenerator::visit(const parser::VariableExpression &node) {
@@ -509,8 +520,8 @@ void IRGenerator::visit(const parser::AssignmentExpression &node) {
 
 void IRGenerator::visit(const parser::IncrementExpression &node) {
     node.lvalue->accept(*this);  // Push current value
-    emit_opcode(ir::OpCode::PUSH_INT);
-    emit_int(1);
+    emit_opcode(ir::OpCode::PUSH_I32);
+    emit_int32(1);
     emit_opcode(ir::OpCode::ADD);
 
     struct LValueResolver : parser::ASTVisitor {
@@ -589,8 +600,8 @@ void IRGenerator::visit(const parser::IncrementExpression &node) {
 
 void IRGenerator::visit(const parser::DecrementExpression &node) {
     node.lvalue->accept(*this);
-    emit_opcode(ir::OpCode::PUSH_INT);
-    emit_int(1);
+    emit_opcode(ir::OpCode::PUSH_I32);
+    emit_int32(1);
     emit_opcode(ir::OpCode::SUB);
 
     struct LValueResolver : parser::ASTVisitor {
@@ -752,11 +763,25 @@ void IRGenerator::visit(const parser::FunctionCall &node) {
 
 void IRGenerator::visit(const parser::VarargExpression &node) { emit_opcode(ir::OpCode::PUSH_VARARGS); }
 
-void IRGenerator::emit_int(int32_t val) {
+void IRGenerator::emit_int64(int64_t val) {
+    uint8_t bytes[8];
+    std::memcpy(bytes, &val, 8);
+    for (int i = 0; i < 8; ++i) emit_byte(bytes[i]);
+}
+
+void IRGenerator::emit_int32(int32_t val) {
     uint8_t bytes[4];
     std::memcpy(bytes, &val, 4);
     for (int i = 0; i < 4; ++i) emit_byte(bytes[i]);
 }
+
+void IRGenerator::emit_int16(int16_t val) {
+    uint8_t bytes[2];
+    std::memcpy(bytes, &val, 2);
+    for (int i = 0; i < 2; ++i) emit_byte(bytes[i]);
+}
+
+void IRGenerator::emit_int8(int8_t val) { emit_byte(static_cast<uint8_t>(val)); }
 
 void IRGenerator::emit_uint32(uint32_t val) {
     uint8_t bytes[4];

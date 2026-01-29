@@ -4,10 +4,10 @@
 
 #include "std/io.eth"
 
-int task(int id) {
+i32 task(i32 id) {
     string msg1 = "Task 1 running!\n";
     string msg2 = "Task 2 running!\n";
-    for (int i = 0; i < 10; i++) {
+    for (i32 i = 0; i < 10; i++) {
         if (id == 1) {
             write(1, "Task", 4);
             // write(1, msg1, 16);
@@ -21,13 +21,13 @@ int task(int id) {
     return id;
 }
 
-int main() {
+i32 main() {
     printf("Writing to terminal async...\n");
-    coroutine(int) t1 = spawn task(1);
-    coroutine(int) t2 = spawn task(2);
+    coroutine(i32) t1 = spawn task(1);
+    coroutine(i32) t2 = spawn task(2);
     await t1;
     await t2;
-    int written = await co_write(1, "Hello from io_uring!\n", 21);
+    i32 written = await co_write(1, "Hello from io_uring!\n", 21);
     printf("Bytes written: %d\n", written);
     return 0;
 }
