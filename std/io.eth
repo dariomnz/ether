@@ -2,6 +2,7 @@ int SYS_OPEN = 0;
 int SYS_READ = 1;
 int SYS_WRITE = 2;
 int SYS_CLOSE = 3;
+int SYS_SLEEP = 4;
 int SYS_PRINTF = 10;
 int SYS_MALLOC = 11;
 int SYS_FREE = 12;
@@ -22,6 +23,10 @@ int close(int fd) {
     return syscall(SYS_CLOSE, fd);
 }
 
+int sleep(int ms) {
+    return syscall(SYS_SLEEP, ms);
+}
+
 coroutine co_open(string path, int flags, int mode) {
     return spawn syscall(SYS_OPEN, 0, path, flags, mode);
 }
@@ -36,6 +41,10 @@ coroutine co_write(int fd, string buf, int size) {
 
 coroutine co_close(int fd) {
     return spawn syscall(SYS_CLOSE, fd);
+}
+
+coroutine co_sleep(int ms) {
+    return spawn syscall(SYS_SLEEP, ms);
 }
 
 int printf(string fmt, ...) {

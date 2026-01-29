@@ -5,8 +5,10 @@
 
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 
+// #define DEBUG
 #include "common/debug.hpp"
 #include "common/defer.hpp"
 
@@ -15,25 +17,25 @@ namespace ether::vm {
 VM::VM(const ir::IRProgram &program) : program_(program) {
     m_globals.resize(program.num_globals, Value(0));
     // Initial coroutine for main
-    Coroutine main_coro;
-    main_coro.id = 0;  // Main is always ID 0
-    main_coro.ip = program.main_addr;
-    main_coro.call_stack.push_back({0, 0, 0, 0});
+    auto main_coro = std::make_unique<Coroutine>();
+    main_coro->id = 0;  // Main is always ID 0
+    main_coro->ip = program.main_addr;
+    main_coro->call_stack.push_back({0, 0, 0, 0});
 
     // Pre-allocate slots for main
     auto main_it = program.functions.find("main");
     if (main_it != program.functions.end()) {
-        main_coro.stack.resize(main_it->second.num_slots);
+        main_coro->stack.resize(main_it->second.num_slots);
     }
 
     m_coroutines.push_back(std::move(main_coro));
 
-    if (io_uring_queue_init(32, &ring_, 0) < 0) {
+    if (io_uring_queue_init(32, &m_ring, 0) < 0) {
         throw std::runtime_error("Failed to initialize io_uring");
     }
 }
 
-VM::~VM() { io_uring_queue_exit(&ring_); }
+VM::~VM() { io_uring_queue_exit(&m_ring); }
 
 Value VM::run(bool collect_stats) {
     const auto &program = program_;
@@ -42,57 +44,84 @@ Value VM::run(bool collect_stats) {
 
     while (!m_coroutines.empty()) {
         m_current_coro %= m_coroutines.size();
+        debug_msg("Current coroutine: " << *m_coroutines[m_current_coro]);
 
-        if (m_coroutines[m_current_coro].finished) {
-            m_finished_coros[m_coroutines[m_current_coro].id] = m_coroutines[m_current_coro].result;
+        if (m_coroutines[m_current_coro]->finished) {
+            uint32_t finished_id = m_coroutines[m_current_coro]->id;
+            Value res = m_coroutines[m_current_coro]->result;
+
+            // Push result to anyone waiting for this ID (optimization)
+            bool found_waiter = false;
+            for (auto &coro : m_coroutines) {
+                if (coro->waiting_for_id == (int32_t)finished_id) {
+                    coro->stack.push_back(res);
+                    coro->waiting_for_id = -1;
+                    found_waiter = true;
+                }
+            }
+
+            if (!found_waiter) {
+                m_finished_coros[finished_id] = res;
+            }
+
             m_coroutines.erase(m_coroutines.begin() + m_current_coro);
             if (m_coroutines.empty()) break;
             continue;
         }
 
-        if (m_coroutines[m_current_coro].waiting_for_id != -1) {
-            uint32_t target_id = (uint32_t)m_coroutines[m_current_coro].waiting_for_id;
+        if (m_coroutines[m_current_coro]->waiting_for_id != -1) {
+            uint32_t target_id = (uint32_t)m_coroutines[m_current_coro]->waiting_for_id;
             if (m_finished_coros.contains(target_id)) {
-                m_coroutines[m_current_coro].stack.push_back(m_finished_coros[target_id]);
-                m_coroutines[m_current_coro].waiting_for_id = -1;
+                m_coroutines[m_current_coro]->stack.push_back(m_finished_coros[target_id]);
+                m_coroutines[m_current_coro]->waiting_for_id = -1;
+                m_finished_coros.erase(target_id);
             } else {
                 m_current_coro++;
                 continue;
             }
         }
 
-        if (m_coroutines[m_current_coro].waiting_for_io) {
+        if (m_coroutines[m_current_coro]->waiting_for_io) {
             handle_io_completion();
         }
 
-        if (m_coroutines[m_current_coro].finished) {
+        if (m_coroutines[m_current_coro]->finished) {
             continue;
         }
 
-        if (m_coroutines[m_current_coro].waiting_for_io) {
-            bool all_waiting = true;
+        if (m_coroutines[m_current_coro]->waiting_for_io) {
+            bool can_progress = false;
             for (const auto &coro : m_coroutines) {
-                if (!coro.waiting_for_io && !coro.finished && coro.waiting_for_id == -1) {
-                    all_waiting = false;
+                if (coro->finished) {
+                    can_progress = true;
+                    break;
+                }
+                if (coro->waiting_for_id != -1) {
+                    if (m_finished_coros.contains(coro->waiting_for_id)) {
+                        can_progress = true;
+                        break;
+                    }
+                } else if (!coro->waiting_for_io) {
+                    can_progress = true;
                     break;
                 }
             }
 
-            if (all_waiting) {
+            if (!can_progress) {
                 struct io_uring_cqe *cqe;
-                io_uring_wait_cqe(&ring_, &cqe);
+                io_uring_wait_cqe(&m_ring, &cqe);
                 handle_io_completion();
             }
 
-            if (m_coroutines[m_current_coro].finished || m_coroutines[m_current_coro].waiting_for_io) {
-                if (m_coroutines[m_current_coro].waiting_for_io) {
+            if (m_coroutines[m_current_coro]->finished || m_coroutines[m_current_coro]->waiting_for_io) {
+                if (m_coroutines[m_current_coro]->waiting_for_io) {
                     m_current_coro++;
                 }
                 continue;
             }
         }
 
-#define CUR_CORO()    m_coroutines[m_current_coro]
+#define CUR_CORO()    (*m_coroutines[m_current_coro])
 #define READ_BYTE()   code[CUR_CORO().ip++]
 #define READ_INT()    (*(int32_t *)&code[(CUR_CORO().ip += 4) - 4])
 #define READ_UINT32() (*(uint32_t *)&code[(CUR_CORO().ip += 4) - 4])
@@ -103,10 +132,6 @@ Value VM::run(bool collect_stats) {
         while (!yielded) {
             if (CUR_CORO().ip == 0xFFFFFFFF) {
                 submit_syscall(CUR_CORO(), CUR_CORO().call_stack.back().num_args_passed);
-                // After syscall completion, it should return/finish if it was spawned.
-                // But wait, submit_syscall only starts it.
-                // When completion happens, we want it to RET.
-                // For now, let's just make it yield.
                 yielded = true;
                 break;
             }
@@ -202,8 +227,13 @@ Value VM::run(bool collect_stats) {
                     }
                     // std::cout << "DEBUG: SYSCALL " << (int)num_args_passed << " (ir=" << (int)ir_num_args << ")" <<
                     // std::endl;
-                    submit_syscall(CUR_CORO(), num_args_passed);
-                    yielded = true;
+                    auto &coro = CUR_CORO();
+                    submit_syscall(coro, num_args_passed);
+                    while (coro.waiting_for_io) {
+                        struct io_uring_cqe *cqe;
+                        io_uring_wait_cqe(&m_ring, &cqe);
+                        handle_io_completion();
+                    }
                     break;
                 }
 
@@ -327,24 +357,25 @@ Value VM::run(bool collect_stats) {
                         num_slots = info.num_slots;
                     }
 
-                    Coroutine new_coro;
+                    auto new_coro = std::make_unique<Coroutine>();
                     uint32_t new_id = m_next_coro_id++;
-                    new_coro.id = new_id;
-                    new_coro.ip = target_addr;
-                    new_coro.call_stack.push_back({0, 0, num_params, num_args_passed});
+                    new_coro->id = new_id;
+                    new_coro->ip = target_addr;
+                    new_coro->call_stack.push_back({0, 0, num_params, num_args_passed});
 
-                    new_coro.stack.resize(num_args_passed);
+                    new_coro->stack.resize(num_args_passed);
                     auto &stack = CUR_CORO().stack;
                     for (int i = num_args_passed - 1; i >= 0; --i) {
-                        new_coro.stack[i] = stack.back();
+                        new_coro->stack[i] = stack.back();
                         stack.pop_back();
                     }
                     if (num_slots > num_args_passed) {
-                        new_coro.stack.resize(num_slots);
+                        new_coro->stack.resize(num_slots);
                     }
 
                     m_coroutines.push_back(std::move(new_coro));
                     push(Value((int32_t)new_id));
+                    m_current_coro = m_coroutines.size() - 1;
                     break;
                 }
 
@@ -357,6 +388,7 @@ Value VM::run(bool collect_stats) {
                     int32_t target_id = pop().as.i32;
                     if (m_finished_coros.contains((uint32_t)target_id)) {
                         push(m_finished_coros[(uint32_t)target_id]);
+                        m_finished_coros.erase((uint32_t)target_id);
                     } else {
                         CUR_CORO().waiting_for_id = target_id;
                         yielded = true;
@@ -407,19 +439,19 @@ Value VM::run(bool collect_stats) {
 
 void VM::handle_io_completion() {
     struct io_uring_cqe *cqe;
-    while (io_uring_peek_cqe(&ring_, &cqe) == 0) {
+    while (io_uring_peek_cqe(&m_ring, &cqe) == 0) {
         uint32_t coro_id = (uint32_t)(uintptr_t)io_uring_cqe_get_data(cqe);
         int32_t res = cqe->res;
-        io_uring_cqe_seen(&ring_, cqe);
+        io_uring_cqe_seen(&m_ring, cqe);
 
         for (auto &coro : m_coroutines) {
-            if (coro.id == coro_id) {
-                coro.stack.push_back(Value(res));
-                coro.waiting_for_io = false;
-                if (coro.ip == 0xFFFFFFFF) {
+            if (coro->id == coro_id) {
+                coro->stack.push_back(Value(res));
+                coro->waiting_for_io = false;
+                if (coro->ip == 0xFFFFFFFF) {
                     // It was a spawned native call, mark it as finished
-                    coro.result = res;
-                    coro.finished = true;
+                    coro->result = res;
+                    coro->finished = true;
                 }
                 break;
             }
@@ -486,6 +518,7 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
                     std::cout << fmt[i];
                 }
             }
+            std::cout << std::flush;
             coro.stack.push_back(Value(0));
             return;
         }
@@ -514,7 +547,7 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
     }
 
     // Async I/O syscalls
-    struct io_uring_sqe *sqe = io_uring_get_sqe(&ring_);
+    struct io_uring_sqe *sqe = io_uring_get_sqe(&m_ring);
     if (!sqe) {
         coro.stack.push_back(Value(-1));
         return;
@@ -547,13 +580,20 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
             io_uring_prep_close(sqe, fd);
             break;
         }
+        case 4: {  // SLEEP
+            int32_t ms = args[1].as.i32;
+            coro.timeout.tv_sec = ms / 1000;
+            coro.timeout.tv_nsec = (ms % 1000) * 1000000;
+            io_uring_prep_timeout(sqe, &coro.timeout, 0, 0);
+            break;
+        }
         default:
             coro.stack.push_back(Value(-2));
             return;
     }
 
     io_uring_sqe_set_data(sqe, (void *)(uintptr_t)coro.id);
-    io_uring_submit(&ring_);
+    io_uring_submit(&m_ring);
     coro.waiting_for_io = true;
 }
 

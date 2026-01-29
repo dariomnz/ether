@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -63,7 +64,22 @@ struct Coroutine {
     std::vector<CallFrame> call_stack;
     size_t ip;
     Value result;
+    struct __kernel_timespec timeout;
     bool finished = false;
+
+    friend std::ostream& operator<<(std::ostream& os, const Coroutine& coro) {
+        os << "Coroutine " << coro.id << " at IP " << coro.ip;
+        if (coro.waiting_for_id != -1) {
+            os << " (awaiting " << coro.waiting_for_id << ")";
+        }
+        if (coro.waiting_for_io) {
+            os << " (waiting for IO)";
+        }
+        if (coro.finished) {
+            os << " (finished)";
+        }
+        return os;
+    }
 };
 
 class VM {
@@ -76,23 +92,23 @@ class VM {
 
    private:
     const ir::IRProgram& program_;
-    std::vector<Coroutine> m_coroutines;
+    std::vector<std::unique_ptr<Coroutine>> m_coroutines;
     std::vector<Value> m_globals;
     size_t m_current_coro = 0;
     uint32_t m_next_coro_id = 1;
     std::unordered_map<uint32_t, Value> m_finished_coros;
     std::unordered_map<ir::OpCode, OpCodeStats> m_stats;
 
-    struct io_uring ring_;
+    struct io_uring m_ring;
 
     void handle_io_completion();
     void submit_syscall(Coroutine& coro, uint8_t num_args);
 
-    inline void push(Value val) { m_coroutines[m_current_coro].stack.push_back(val); }
+    inline void push(Value val) { m_coroutines[m_current_coro]->stack.push_back(val); }
     inline Value pop() {
         auto& coro = m_coroutines[m_current_coro];
-        Value val = coro.stack.back();
-        coro.stack.pop_back();
+        Value val = coro->stack.back();
+        coro->stack.pop_back();
         return val;
     }
 };

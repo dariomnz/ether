@@ -1,0 +1,35 @@
+
+// EXPECTED_OUTPUT: Starting sleep test...
+// EXPECTED_OUTPUT: Sleeping for 1ms...
+// EXPECTED_OUTPUT: Sleeping for 50ms...
+// EXPECTED_OUTPUT: Waiting for tasks...
+// EXPECTED_OUTPUT: Done sleeping 1ms
+// EXPECTED_OUTPUT: Task 1 result: 1
+// EXPECTED_OUTPUT: Done sleeping 50ms
+// EXPECTED_OUTPUT: Task 2 result: 2
+// EXPECTED_OUTPUT: All done!
+
+#include "std/io.eth"
+
+int task(int id, int ms) {
+    printf("Sleeping for %dms...\n", ms);
+    await co_sleep(ms);
+    printf("Done sleeping %dms\n", ms);
+    return id;
+}
+
+int main() {
+    printf("Starting sleep test...\n");
+    
+    coroutine t1 = spawn task(1, 1);
+    coroutine t2 = spawn task(2, 50);
+
+    printf("Waiting for tasks...\n");
+    int res1 = await t1;
+    printf("Task 1 result: %d\n", res1);
+    int res2 = await t2;
+    printf("Task 2 result: %d\n", res2);
+    
+    printf("All done!\n");
+    return 0;
+}
