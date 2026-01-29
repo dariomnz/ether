@@ -3,13 +3,18 @@
 #include <sys/wait.h>
 
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <optional>
+#include <queue>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -29,6 +34,14 @@ struct ExecResult {
     int status;
 };
 
+struct TestResult {
+    bool success;
+    std::string test_name;
+    double elapsed;
+    std::vector<std::string> errors;
+    std::string system_error;
+};
+
 ExecResult exec(const std::string& cmd) {
     std::array<char, 128> buffer;
     std::string result;
@@ -43,13 +56,11 @@ ExecResult exec(const std::string& cmd) {
     return {result, status};
 }
 
-bool run_test(const std::string& ether_bin, const TestCase& tc) {
-    std::cout << "Running test: " << tc.path.relative_path() << "... " << std::flush;
+TestResult perform_test(const std::string& ether_bin, const TestCase& tc) {
     auto start = std::chrono::high_resolution_clock::now();
     try {
         if (tc.expected_outputs.empty() && tc.not_expected_outputs.empty() && !tc.expected_result.has_value()) {
-            std::cout << "\033[33mNOTHING TO TEST\033[0m" << std::endl;
-            return false;
+            return {false, tc.path.string(), 0, {}, "NOTHING TO TEST"};
         }
         // Use 'timeout 1s' to prevent hanging
         std::string cmd = "timeout 1s " + ether_bin + " " + tc.path.string() + " " + tc.args + " 2>&1";
@@ -61,9 +72,7 @@ bool run_test(const std::string& ether_bin, const TestCase& tc) {
         if (exit_code == 124) {
             auto end = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double> elapsed = end - start;
-            std::cout << "\033[33mTIMEOUT\033[0m in " << std::fixed << std::setprecision(3) << elapsed.count()
-                      << " seconds" << std::endl;
-            return false;
+            return {false, tc.path.string(), elapsed.count(), {}, "TIMEOUT"};
         }
 
         std::vector<std::string> errors;
@@ -72,9 +81,9 @@ bool run_test(const std::string& ether_bin, const TestCase& tc) {
             std::string marker = "VM Execution Result: ";
             size_t pos = output.find(marker);
             if (pos != std::string::npos) {
-                size_t start = pos + marker.length();
-                size_t end = output.find_first_not_of("-0123456789", start);
-                int actual_result = std::stoi(output.substr(start, end - start));
+                size_t start_pos = pos + marker.length();
+                size_t end_pos = output.find_first_not_of("-0123456789", start_pos);
+                int actual_result = std::stoi(output.substr(start_pos, end_pos - start_pos));
                 if (actual_result != *tc.expected_result) {
                     errors.push_back("Expected result " + std::to_string(*tc.expected_result) + ", got " +
                                      std::to_string(actual_result));
@@ -105,31 +114,15 @@ bool run_test(const std::string& ether_bin, const TestCase& tc) {
         }
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        if (errors.empty()) {
-            // Remove the line output to the terminal
-            std::cout << "\033[32mPASSED\033[0m in " << std::fixed << std::setprecision(3) << elapsed.count()
-                      << " seconds\n" << std::flush;
-            // std::cout << "\r\033[K" << std::flush;
-            return true;
-        } else {
-            std::cout << "\033[31mFAILED\033[0m in " << std::fixed << std::setprecision(3) << elapsed.count()
-                      << " seconds" << std::endl;
-            for (const auto& err : errors) {
-                std::cout << "  - " << err << std::endl;
-            }
-            return false;
-        }
+        return {errors.empty(), tc.path.string(), elapsed.count(), errors, ""};
     } catch (const std::exception& e) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        std::cout << "\033[31mERROR\033[0m in " << std::fixed << std::setprecision(3) << elapsed.count() << " seconds"
-                  << std::endl;
-        std::cout << "  - " << e.what() << std::endl;
-        return false;
+        return {false, tc.path.string(), elapsed.count(), {}, e.what()};
     }
 }
 
-int run_tests(const std::string& ether_bin, const std::string& test_path) {
+int run_tests(const std::string& ether_bin, const std::string& test_path, const TestOptions& options) {
     auto start = std::chrono::high_resolution_clock::now();
     std::string ether_bin_abs = fs::absolute(ether_bin).string();
     fs::path target = test_path;
@@ -183,12 +176,56 @@ int run_tests(const std::string& ether_bin, const std::string& test_path) {
         process_file(target);
     }
 
-    int passed = 0;
-    for (const auto& tc : tests) {
-        if (run_test(ether_bin_abs, tc)) {
-            passed++;
-        }
+    std::mutex output_mutex;
+    std::mutex queue_mutex;
+    std::queue<size_t> test_queue;
+    for (size_t i = 0; i < tests.size(); ++i) test_queue.push(i);
+
+    std::atomic<int> passed(0);
+    int num_workers = options.parallel_jobs;
+    if (num_workers <= 0) num_workers = std::thread::hardware_concurrency();
+    if (num_workers <= 0) num_workers = 1;
+
+    std::vector<std::thread> workers;
+    for (int i = 0; i < num_workers; ++i) {
+        workers.emplace_back([&] {
+            while (true) {
+                size_t test_idx;
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    if (test_queue.empty()) return;
+                    test_idx = test_queue.front();
+                    test_queue.pop();
+                }
+
+                auto result = perform_test(ether_bin_abs, tests[test_idx]);
+
+                {
+                    std::lock_guard<std::mutex> lock(output_mutex);
+                    if (result.success) {
+                        passed++;
+                        if (!options.quiet) {
+                            std::cout << "Running test: " << result.test_name << "... " << "\033[32mPASSED\033[0m in "
+                                      << std::fixed << std::setprecision(3) << result.elapsed << " seconds"
+                                      << std::endl;
+                        }
+                    } else {
+                        std::cout << "Running test: " << result.test_name << "... " << "\033[31mFAILED\033[0m in "
+                                  << std::fixed << std::setprecision(3) << result.elapsed << " seconds" << std::endl;
+                        if (!result.system_error.empty()) {
+                            std::cout << "  - \033[31mERROR:\033[0m " << result.system_error << std::endl;
+                        }
+                        for (const auto& err : result.errors) {
+                            std::cout << "  - " << err << std::endl;
+                        }
+                    }
+                }
+            }
+        });
     }
+
+    for (auto& w : workers) w.join();
+
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
     std::cout << "\nSummary: " << passed << "/" << tests.size() << " tests passed in " << std::fixed

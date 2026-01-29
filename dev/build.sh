@@ -18,4 +18,4 @@ done
 
 cmake --build ${build_dir} -j $(nproc) ${FLAGS}
 
-./build/ether --test ./test
+./build/ether --test ./test --quiet

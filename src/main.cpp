@@ -7,6 +7,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "common/error.hpp"
@@ -262,7 +263,20 @@ int main(int argc, char *argv[]) {
             std::cerr << "Error: --test requires a directory or file path" << std::endl;
             return 1;
         }
-        return ether::run_tests(argv[0], argv[2]);
+        std::string test_path = argv[2];
+        ether::TestOptions options;
+        for (int i = 3; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "-j" && i + 1 < argc) {
+                options.parallel_jobs = std::stoi(argv[++i]);
+                if (options.parallel_jobs == 0) {
+                    options.parallel_jobs = std::thread::hardware_concurrency();
+                }
+            } else if (arg == "--quiet" || arg == "-q") {
+                options.quiet = true;
+            }
+        }
+        return ether::run_tests(argv[0], test_path, options);
     }
 
     if (first_arg == "--lsp") {
