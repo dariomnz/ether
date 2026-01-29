@@ -40,6 +40,7 @@ struct TestResult {
     double elapsed;
     std::vector<std::string> errors;
     std::string system_error;
+    std::string output;
 };
 
 ExecResult exec(const std::string& cmd) {
@@ -60,7 +61,7 @@ TestResult perform_test(const std::string& ether_bin, const TestCase& tc) {
     auto start = std::chrono::high_resolution_clock::now();
     try {
         if (tc.expected_outputs.empty() && tc.not_expected_outputs.empty() && !tc.expected_result.has_value()) {
-            return {false, tc.path.string(), 0, {}, "NOTHING TO TEST"};
+            return {false, tc.path.string(), 0, {}, "NOTHING TO TEST", ""};
         }
         // Use 'timeout 1s' to prevent hanging
         std::string cmd = "timeout 1s " + ether_bin + " " + tc.path.string() + " " + tc.args + " 2>&1";
@@ -72,7 +73,7 @@ TestResult perform_test(const std::string& ether_bin, const TestCase& tc) {
         if (exit_code == 124) {
             auto end = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double> elapsed = end - start;
-            return {false, tc.path.string(), elapsed.count(), {}, "TIMEOUT"};
+            return {false, tc.path.string(), elapsed.count(), {}, "TIMEOUT", output};
         }
 
         std::vector<std::string> errors;
@@ -114,11 +115,11 @@ TestResult perform_test(const std::string& ether_bin, const TestCase& tc) {
         }
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        return {errors.empty(), tc.path.string(), elapsed.count(), errors, ""};
+        return {errors.empty(), tc.path.string(), elapsed.count(), errors, "", output};
     } catch (const std::exception& e) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        return {false, tc.path.string(), elapsed.count(), {}, e.what()};
+        return {false, tc.path.string(), elapsed.count(), {}, e.what(), ""};
     }
 }
 
@@ -214,6 +215,15 @@ int run_tests(const std::string& ether_bin, const std::string& test_path, const 
                     }
                     for (const auto& err : result.errors) {
                         std::cout << "  - " << err << std::endl;
+                    }
+                    if (!result.output.empty()) {
+                        std::cout << "  --- PROGRAM OUTPUT ---" << std::endl;
+                        std::string line;
+                        std::stringstream ss(result.output);
+                        while (std::getline(ss, line)) {
+                            std::cout << "  | " << line << std::endl;
+                        }
+                        std::cout << "  ----------------------" << std::endl;
                     }
                 }
             }
