@@ -47,7 +47,17 @@ DataType Parser::parse_type() {
         kind = DataType::Kind::String;
     else if (match(lexer::TokenType::Void))
         kind = DataType::Kind::Void;
-    else {
+    else if (match(lexer::TokenType::Struct)) {
+        if (!check(lexer::TokenType::Identifier)) {
+            const auto &token = peek();
+            throw CompilerError("Expected name after 'struct'", m_filename, token.line, token.column,
+                                (int)token.lexeme.size());
+        }
+        std::string name(advance().lexeme);
+        return DataType(DataType::Kind::Struct, std::move(name));
+    } else if (match(lexer::TokenType::Identifier)) {
+        return DataType(DataType::Kind::Struct, std::string(m_tokens[m_pos - 1].lexeme));
+    } else {
         const auto &err_token = peek();
         throw CompilerError("Expected type", m_filename, err_token.line, err_token.column,
                             (int)err_token.lexeme.size());
@@ -110,15 +120,22 @@ void Parser::parse_top_level(Program &program) {
         lexer::Lexer imported_lexer(included_source, resolved_path);
         auto imported_tokens = imported_lexer.tokenize();
         Parser imported_parser(imported_tokens, resolved_path);
-        auto imported_prog = imported_parser.parse_program();
-
-        for (auto &g : imported_prog->globals) {
-            program.globals.push_back(std::move(g));
-        }
-        for (auto &f : imported_prog->functions) {
-            program.functions.push_back(std::move(f));
-        }
+        auto sub_program = imported_parser.parse_program();
+        // Merge sub_program into current program
+        for (auto &inc : sub_program->includes) program.includes.push_back(std::move(inc));
+        for (auto &str : sub_program->structs) program.structs.push_back(std::move(str));
+        for (auto &glob : sub_program->globals) program.globals.push_back(std::move(glob));
+        for (auto &func : sub_program->functions) program.functions.push_back(std::move(func));
         return;
+    }
+
+    if (check(lexer::TokenType::Struct)) {
+        // Lookahead to see if it's a declaration or a variable/function
+        if (m_pos + 2 < m_tokens.size() && m_tokens[m_pos + 1].type == lexer::TokenType::Identifier &&
+            m_tokens[m_pos + 2].type == lexer::TokenType::LBrace) {
+            program.structs.push_back(parse_struct_declaration());
+            return;
+        }
     }
 
     const auto &start_token = peek();
@@ -308,7 +325,9 @@ std::unique_ptr<Statement> Parser::parse_statement() {
     }
 
     if (check(lexer::TokenType::Int) || check(lexer::TokenType::Coroutine) || check(lexer::TokenType::Ptr) ||
-        check(lexer::TokenType::Void) || check(lexer::TokenType::String)) {
+        check(lexer::TokenType::Void) || check(lexer::TokenType::String) || check(lexer::TokenType::Struct) ||
+        (check(lexer::TokenType::Identifier) && m_pos + 1 < m_tokens.size() &&
+         m_tokens[m_pos + 1].type == lexer::TokenType::Identifier)) {
         DataType type = parse_type();
         if (!check(lexer::TokenType::Identifier)) {
             const auto &token = peek();
@@ -354,43 +373,39 @@ std::unique_ptr<Statement> Parser::parse_statement() {
                                                  len);
 }
 
+std::unique_ptr<StructDeclaration> Parser::parse_struct_declaration() {
+    const auto &struct_token = advance();  // skip 'struct'
+    const auto &name_token = advance();    // skip identifier
+    std::string name(name_token.lexeme);
+
+    if (!match(lexer::TokenType::LBrace)) {
+        throw CompilerError("Expected '{' after struct name", m_filename, peek().line, peek().column);
+    }
+
+    std::vector<Parameter> members;
+    while (!check(lexer::TokenType::RBrace) && !check(lexer::TokenType::EOF_TOKEN)) {
+        DataType type = parse_type();
+        if (!check(lexer::TokenType::Identifier)) {
+            throw CompilerError("Expected member name", m_filename, peek().line, peek().column);
+        }
+        std::string mem_name(advance().lexeme);
+        if (!match(lexer::TokenType::Semicolon)) {
+            throw CompilerError("Expected ';' after member declaration", m_filename, peek().line, peek().column);
+        }
+        members.push_back({type, mem_name});
+    }
+
+    if (!match(lexer::TokenType::RBrace)) {
+        throw CompilerError("Expected '}' after struct members", m_filename, peek().line, peek().column);
+    }
+
+    int len = (int)(m_tokens[m_pos - 1].column - struct_token.column);
+    return std::make_unique<StructDeclaration>(name, name_token.line, name_token.column, std::move(members), m_filename,
+                                               struct_token.line, struct_token.column, len);
+}
+
 std::unique_ptr<Expression> Parser::parse_expression() {
     const auto &start_token = peek();
-    if (check(lexer::TokenType::Identifier)) {
-        // Lookahead to see if it's an assignment or increment
-        if (m_pos + 1 < m_tokens.size()) {
-            if (m_tokens[m_pos + 1].type == lexer::TokenType::Equal) {
-                const auto &id_token = advance();
-                auto lvalue =
-                    std::make_unique<VariableExpression>(std::string(id_token.lexeme), m_filename, id_token.line,
-                                                         id_token.column, (int)id_token.lexeme.size());
-                advance();  // skip '='
-                int len = (int)(m_tokens[m_pos - 1].column - start_token.column);
-                return std::make_unique<AssignmentExpression>(std::move(lvalue), parse_expression(), m_filename,
-                                                              start_token.line, start_token.column, len);
-            }
-            if (m_tokens[m_pos + 1].type == lexer::TokenType::PlusPlus) {
-                const auto &id_token = advance();
-                auto lvalue =
-                    std::make_unique<VariableExpression>(std::string(id_token.lexeme), m_filename, id_token.line,
-                                                         id_token.column, (int)id_token.lexeme.size());
-                advance();  // skip '++'
-                return std::make_unique<IncrementExpression>(
-                    std::move(lvalue), m_filename, start_token.line, start_token.column,
-                    (int)m_tokens[m_pos - 1].lexeme.size() + (int)id_token.lexeme.size());
-            }
-            if (m_tokens[m_pos + 1].type == lexer::TokenType::MinusMinus) {
-                const auto &id_token = advance();
-                auto lvalue =
-                    std::make_unique<VariableExpression>(std::string(id_token.lexeme), m_filename, id_token.line,
-                                                         id_token.column, (int)id_token.lexeme.size());
-                advance();  // skip '--'
-                return std::make_unique<DecrementExpression>(
-                    std::move(lvalue), m_filename, start_token.line, start_token.column,
-                    (int)m_tokens[m_pos - 1].lexeme.size() + (int)id_token.lexeme.size());
-            }
-        }
-    }
     if (match(lexer::TokenType::Await)) {
         auto expr = parse_expression();
         int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
@@ -416,7 +431,29 @@ std::unique_ptr<Expression> Parser::parse_expression() {
         int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
         return std::make_unique<SpawnExpression>(std::move(call), m_filename, line, col, len);
     }
-    return parse_comparison();
+
+    auto expr = parse_comparison();
+
+    if (match(lexer::TokenType::Equal)) {
+        auto value = parse_expression();
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
+        return std::make_unique<AssignmentExpression>(std::move(expr), std::move(value), m_filename, start_token.line,
+                                                      start_token.column, len);
+    }
+
+    if (match(lexer::TokenType::PlusPlus)) {
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
+        return std::make_unique<IncrementExpression>(std::move(expr), m_filename, start_token.line, start_token.column,
+                                                     len);
+    }
+
+    if (match(lexer::TokenType::MinusMinus)) {
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
+        return std::make_unique<DecrementExpression>(std::move(expr), m_filename, start_token.line, start_token.column,
+                                                     len);
+    }
+
+    return expr;
 }
 
 std::unique_ptr<Expression> Parser::parse_comparison() {
@@ -493,6 +530,17 @@ std::unique_ptr<Expression> Parser::parse_multiplication() {
 
 std::unique_ptr<Expression> Parser::parse_primary() {
     const auto &token = peek();
+    if (match(lexer::TokenType::Sizeof)) {
+        if (!match(lexer::TokenType::LParent)) {
+            throw CompilerError("Expected '(' after 'sizeof'", m_filename, peek().line, peek().column);
+        }
+        DataType type = parse_type();
+        if (!match(lexer::TokenType::RParent)) {
+            throw CompilerError("Expected ')' after type in 'sizeof'", m_filename, peek().line, peek().column);
+        }
+        int len = (int)(m_tokens[m_pos - 1].column - token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
+        return std::make_unique<SizeofExpression>(type, m_filename, token.line, token.column, len);
+    }
     if (match(lexer::TokenType::IntegerLiteral)) {
         const auto &tok = m_tokens[m_pos - 1];
         int val = std::stoi(std::string(tok.lexeme));
@@ -505,6 +553,7 @@ std::unique_ptr<Expression> Parser::parse_primary() {
     }
     if (match(lexer::TokenType::Identifier)) {
         std::string name = std::string(m_tokens[m_pos - 1].lexeme);
+        std::unique_ptr<Expression> expr;
         if (match(lexer::TokenType::LParent)) {
             std::vector<std::unique_ptr<Expression>> args;
             if (!check(lexer::TokenType::RParent)) {
@@ -524,11 +573,23 @@ std::unique_ptr<Expression> Parser::parse_primary() {
                                     (int)err_tok.lexeme.size());
             }
             int len = (int)(m_tokens[m_pos - 1].column - token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
-            return std::make_unique<FunctionCall>(std::move(name), std::move(args), m_filename, token.line,
+            expr = std::make_unique<FunctionCall>(std::move(name), std::move(args), m_filename, token.line,
                                                   token.column, len);
+        } else {
+            expr = std::make_unique<VariableExpression>(std::move(name), m_filename, token.line, token.column,
+                                                        (int)name.size());
         }
-        return std::make_unique<VariableExpression>(std::move(name), m_filename, token.line, token.column,
-                                                    (int)name.size());
+
+        while (match(lexer::TokenType::Dot)) {
+            if (!check(lexer::TokenType::Identifier)) {
+                throw CompilerError("Expected member name after '.'", m_filename, peek().line, peek().column);
+            }
+            std::string member = std::string(advance().lexeme);
+            int len = (int)(m_tokens[m_pos - 1].column - token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
+            expr = std::make_unique<MemberAccessExpression>(std::move(expr), std::move(member), m_filename, token.line,
+                                                            token.column, len);
+        }
+        return expr;
     }
     if (match(lexer::TokenType::LParent)) {
         auto expr = parse_expression();

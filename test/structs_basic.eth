@@ -1,0 +1,23 @@
+// EXPECTED_OUTPUT: Point: 10, 20
+// EXPECTED_OUTPUT: Updated Point: 15, 21
+#include "std/io.eth"
+
+// Basic struct test
+struct Point {
+    int x;
+    int y;
+}
+
+void main() {
+    Point p;
+    
+    p.x = 10;
+    p.y = 20;
+    
+    printf("Point: %d, %d\n", p.x, p.y);
+    
+    p.x = p.x + 5;
+    p.y++;
+    
+    printf("Updated Point: %d, %d\n", p.x, p.y);
+}

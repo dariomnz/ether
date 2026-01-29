@@ -396,6 +396,25 @@ Value VM::run(bool collect_stats) {
                     break;
                 }
 
+                case ir::OpCode::LOAD_PTR_OFFSET: {
+                    uint8_t offset = READ_BYTE();
+                    Value ptr_val = pop();
+                    if (!ptr_val.as.ptr) throw std::runtime_error("Null pointer dereference");
+                    Value *ptr = (Value *)ptr_val.as.ptr;
+                    push(ptr[offset]);
+                    break;
+                }
+
+                case ir::OpCode::STORE_PTR_OFFSET: {
+                    uint8_t offset = READ_BYTE();
+                    Value ptr_val = pop();
+                    Value val = pop();
+                    if (!ptr_val.as.ptr) throw std::runtime_error("Null pointer dereference");
+                    Value *ptr = (Value *)ptr_val.as.ptr;
+                    ptr[offset] = val;
+                    break;
+                }
+
                 case ir::OpCode::POP: {
                     pop();
                     break;

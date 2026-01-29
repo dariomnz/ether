@@ -12,7 +12,27 @@ void Analyzer::analyze(Program &program) {
     // Register built-ins
     m_functions["syscall"] = {DataType(DataType::Kind::Int), {}, true, "", 0, 0};
 
-    // First pass: collect function signatures
+    // First pass: collect struct definitions
+    for (const auto &str : program.structs) {
+        StructInfo info;
+        info.name = str->name;
+        uint16_t offset = 0;
+        for (const auto &member : str->members) {
+            info.members[member.name] = {member.type, offset};
+            uint16_t member_size = 1;
+            if (member.type.kind == DataType::Kind::Struct) {
+                auto it = m_structs.find(member.type.struct_name);
+                if (it != m_structs.end()) {
+                    member_size = it->second.total_size;
+                }
+            }
+            offset += member_size;
+        }
+        info.total_size = offset;
+        m_structs[str->name] = info;
+    }
+
+    // First pass (continued): collect function signatures
     for (const auto &func : program.functions) {
         std::vector<DataType> param_types;
         for (const auto &param : func->params) {
@@ -31,6 +51,9 @@ void Analyzer::analyze(Program &program) {
 void Analyzer::visit(Program &node) {
     for (const auto &global : node.globals) {
         global->accept(*this);
+    }
+    for (const auto &str : node.structs) {
+        str->accept(*this);
     }
     for (const auto &func : node.functions) {
         func->accept(*this);
@@ -63,7 +86,8 @@ void Analyzer::visit(VariableDeclaration &node) {
         if (!(init_type == node.type)) {
             // Allow assigning 0 to pointers
             bool is_null_ptr = (node.type.kind == DataType::Kind::Ptr && init_type.kind == DataType::Kind::Int);
-            if (!is_null_ptr) {
+            bool is_ptr_cast = (node.type.kind == DataType::Kind::Ptr && init_type.kind == DataType::Kind::Ptr);
+            if (!is_null_ptr && !is_ptr_cast) {
                 throw CompilerError("Type mismatch in variable declaration: expected " + node.type.to_string() +
                                         ", but got " + init_type.to_string(),
                                     node.filename, node.line, node.column, node.length);
@@ -196,9 +220,13 @@ void Analyzer::visit(AssignmentExpression &node) {
     DataType lval_type = m_current_type;
 
     if (!(val_type == lval_type)) {
-        throw CompilerError(
-            "Type mismatch in assignment: expected " + lval_type.to_string() + ", but got " + val_type.to_string(),
-            node.filename, node.line, node.column, node.length);
+        bool is_null_ptr = (lval_type.kind == DataType::Kind::Ptr && val_type.kind == DataType::Kind::Int);
+        bool is_ptr_cast = (lval_type.kind == DataType::Kind::Ptr && val_type.kind == DataType::Kind::Ptr);
+        if (!is_null_ptr && !is_ptr_cast) {
+            throw CompilerError(
+                "Type mismatch in assignment: expected " + lval_type.to_string() + ", but got " + val_type.to_string(),
+                node.filename, node.line, node.column, node.length);
+        }
     }
     m_current_type = lval_type;
     node.type = std::make_unique<DataType>(m_current_type);
@@ -247,6 +275,51 @@ const Analyzer::FunctionInfo *Analyzer::lookup_function(const std::string &name)
         return &it->second;
     }
     return nullptr;
+}
+
+void Analyzer::visit(StructDeclaration &node) {
+    // Already processed in first pass
+}
+
+void Analyzer::visit(MemberAccessExpression &node) {
+    node.object->accept(*this);
+    DataType obj_type = m_current_type;
+
+    if (obj_type.kind == DataType::Kind::Ptr && obj_type.inner && obj_type.inner->kind == DataType::Kind::Struct) {
+        std::string struct_name = obj_type.inner->struct_name;
+        if (m_structs.find(struct_name) == m_structs.end()) {
+            throw CompilerError("Undefined struct: " + struct_name, node.filename, node.line, node.column, node.length);
+        }
+        const auto &info = m_structs[struct_name];
+        if (info.members.find(node.member_name) == info.members.end()) {
+            throw CompilerError("Struct " + struct_name + " has no member named " + node.member_name, node.filename,
+                                node.line, node.column, node.length);
+        }
+        const auto &member = info.members.at(node.member_name);
+        m_current_type = member.first;
+        node.type = std::make_unique<DataType>(m_current_type);
+    } else if (obj_type.kind == DataType::Kind::Struct) {
+        std::string struct_name = obj_type.struct_name;
+        if (m_structs.find(struct_name) == m_structs.end()) {
+            throw CompilerError("Undefined struct: " + struct_name, node.filename, node.line, node.column, node.length);
+        }
+        const auto &info = m_structs[struct_name];
+        if (info.members.find(node.member_name) == info.members.end()) {
+            throw CompilerError("Struct " + struct_name + " has no member named " + node.member_name, node.filename,
+                                node.line, node.column, node.length);
+        }
+        const auto &member = info.members.at(node.member_name);
+        m_current_type = member.first;
+        node.type = std::make_unique<DataType>(m_current_type);
+    } else {
+        throw CompilerError("Member access '.' requires struct or struct pointer, but got " + obj_type.to_string(),
+                            node.filename, node.line, node.column, node.length);
+    }
+}
+
+void Analyzer::visit(SizeofExpression &node) {
+    m_current_type = DataType(DataType::Kind::Int);
+    node.type = std::make_unique<DataType>(m_current_type);
 }
 
 }  // namespace ether::sema

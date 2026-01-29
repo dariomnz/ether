@@ -33,7 +33,9 @@ class IRGenerator : public parser::ASTVisitor {
     void visit(const parser::ForStatement &node) override;
     void visit(const parser::VariableDeclaration &node) override;
     void visit(const parser::Function &node) override;
+    void visit(const parser::StructDeclaration &node) override;
     void visit(const parser::Program &node) override;
+    void visit(const parser::MemberAccessExpression &node) override;
 
    private:
     ir::IRProgram m_program;
@@ -51,6 +53,12 @@ class IRGenerator : public parser::ASTVisitor {
     };
     std::vector<Scope> m_scopes;
 
+    struct StructInfo {
+        std::unordered_map<std::string, uint8_t> member_offsets;
+        uint16_t total_size;
+    };
+    std::unordered_map<std::string, StructInfo> m_structs;
+
     // Helpers
     void emit_byte(uint8_t byte) { m_program.bytecode.push_back(byte); }
     void emit_opcode(ir::OpCode op) { emit_byte(static_cast<uint8_t>(op)); }
@@ -60,7 +68,9 @@ class IRGenerator : public parser::ASTVisitor {
 
     uint32_t get_string_id(const std::string &str);
     Symbol get_var_symbol(const std::string &name);
-    void define_var(const std::string &name);
+    uint32_t get_type_size(const parser::DataType &type);
+    void visit(const parser::SizeofExpression &node) override;
+    void define_var(const std::string &name, uint16_t size = 1);
 
     struct JumpPlaceholder {
         size_t pos;

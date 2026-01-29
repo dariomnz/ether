@@ -21,6 +21,8 @@ enum class TokenType {
     String,
     Ptr,
     Void,
+    Struct,
+    Sizeof,
 
     // Identifiers and Literals
     Identifier,
@@ -47,6 +49,7 @@ enum class TokenType {
     Semicolon,
     Comma,
     Ellipsis,
+    Dot,
 
     // special
     EOF_TOKEN,

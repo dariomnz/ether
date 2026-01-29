@@ -64,7 +64,7 @@ struct DependencyTracker : public parser::ASTVisitor {
         if (node.call) node.call->accept(*this);
     }
     void visit(const parser::AssignmentExpression &node) override {
-        trace(node.lvalue->name);
+        node.lvalue->accept(*this);
         if (node.value) node.value->accept(*this);
     }
     void visit(const parser::IncrementExpression &node) override {
@@ -73,9 +73,14 @@ struct DependencyTracker : public parser::ASTVisitor {
     void visit(const parser::DecrementExpression &node) override {
         if (node.lvalue) node.lvalue->accept(*this);
     }
+    void visit(const parser::MemberAccessExpression &node) override {
+        if (node.object) node.object->accept(*this);
+    }
+    void visit(const parser::StructDeclaration &node) override {}
     void visit(const parser::AwaitExpression &node) override {
         if (node.expr) node.expr->accept(*this);
     }
+    void visit(const parser::SizeofExpression &) override {}
     void visit(const parser::ForStatement &node) override {
         if (node.init) node.init->accept(*this);
         if (node.condition) node.condition->accept(*this);
@@ -121,7 +126,11 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
     // Define ONLY reachable globals
     for (const auto &global : ast.globals) {
         if (m_reachable.contains(global->name)) {
-            define_var(global->name);
+            uint16_t size = 1;
+            if (global->type.kind == parser::DataType::Kind::Struct) {
+                size = m_structs.at(global->type.struct_name).total_size;
+            }
+            define_var(global->name, size);
         }
     }
     m_program.num_globals = m_scopes[0].next_slot;
@@ -135,7 +144,26 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
     }
     m_program.functions["syscall"] = {0xFFFFFFFF, 0, 0};
 
-    // 3. Entry point / Global initialization
+    // 3. Collect struct layouts
+    for (const auto &str : ast.structs) {
+        StructInfo info;
+        uint16_t offset = 0;
+        for (const auto &member : str->members) {
+            info.member_offsets[member.name] = (uint8_t)offset;
+            uint16_t member_size = 1;
+            if (member.type.kind == parser::DataType::Kind::Struct) {
+                auto it = m_structs.find(member.type.struct_name);
+                if (it != m_structs.end()) {
+                    member_size = it->second.total_size;
+                }
+            }
+            offset += member_size;
+        }
+        info.total_size = offset;
+        m_structs[str->name] = info;
+    }
+
+    // 4. Entry point / Global initialization
     m_program.main_addr = 0;
     for (const auto &global : ast.globals) {
         if (m_reachable.contains(global->name) && global->init) {
@@ -153,7 +181,7 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
     emit_byte(0);  // main takes 0 args
     emit_opcode(ir::OpCode::HALT);
 
-    // 4. Generate functions
+    // 5. Generate functions
     ast.accept(*this);
 
     emit_opcode(ir::OpCode::HALT);
@@ -175,6 +203,95 @@ void IRGenerator::visit(const parser::Program &node) {
         if (!m_reachable.contains(func->name)) continue;
         m_program.functions[func->name].entry_addr = m_program.bytecode.size();
         func->accept(*this);
+    }
+    for (const auto &str : node.structs) {
+        str->accept(*this);
+    }
+}
+
+void IRGenerator::visit(const parser::StructDeclaration &node) {
+    // Layout already collected
+}
+
+uint32_t IRGenerator::get_type_size(const parser::DataType &type) {
+    uint32_t num_slots = 1;
+    if (type.kind == parser::DataType::Kind::Struct) {
+        num_slots = m_structs.at(type.struct_name).total_size;
+    }
+    return num_slots * 16;
+}
+
+void IRGenerator::visit(const parser::SizeofExpression &node) {
+    emit_opcode(ir::OpCode::PUSH_INT);
+    emit_int(get_type_size(node.target_type));
+}
+
+void IRGenerator::visit(const parser::MemberAccessExpression &node) {
+    struct LValueResolver : parser::ASTVisitor {
+        IRGenerator *gen;
+        enum Kind { Stack, Heap } kind = Stack;
+        uint16_t slot = 0;
+        bool is_global = false;
+        uint8_t offset = 0;
+
+        void visit(const parser::VariableExpression &v) override {
+            auto s = gen->get_var_symbol(v.name);
+            kind = Stack;
+            slot = s.slot;
+            is_global = s.is_global;
+        }
+
+        void visit(const parser::MemberAccessExpression &m) override {
+            m.object->accept(*this);
+            std::string struct_name;
+            bool is_ptr = false;
+            if (m.object->type->kind == parser::DataType::Kind::Ptr) {
+                struct_name = m.object->type->inner->struct_name;
+                is_ptr = true;
+            } else {
+                struct_name = m.object->type->struct_name;
+            }
+            uint8_t m_offset = gen->m_structs.at(struct_name).member_offsets.at(m.member_name);
+
+            if (kind == Stack) {
+                if (is_ptr) {
+                    if (is_global) {
+                        gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
+                        gen->emit_uint16(slot);
+                    } else {
+                        gen->emit_opcode(ir::OpCode::LOAD_VAR);
+                        gen->emit_byte((uint8_t)slot);
+                    }
+                    kind = Heap;
+                    offset = m_offset;
+                } else {
+                    slot += m_offset;
+                }
+            } else {
+                if (is_ptr) {
+                    gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
+                    gen->emit_byte(offset);
+                    offset = m_offset;
+                } else {
+                    offset += m_offset;
+                }
+            }
+        }
+    } resolver;
+    resolver.gen = this;
+    node.accept(resolver);
+
+    if (resolver.kind == LValueResolver::Stack) {
+        if (resolver.is_global) {
+            emit_opcode(ir::OpCode::LOAD_GLOBAL);
+            emit_uint16(resolver.slot);
+        } else {
+            emit_opcode(ir::OpCode::LOAD_VAR);
+            emit_byte((uint8_t)resolver.slot);
+        }
+    } else {
+        emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
+        emit_byte(resolver.offset);
     }
 }
 
@@ -242,18 +359,21 @@ void IRGenerator::visit(const parser::ReturnStatement &node) {
 void IRGenerator::visit(const parser::VariableDeclaration &node) {
     if (node.init) {
         node.init->accept(*this);
-    } else {
-        emit_opcode(ir::OpCode::PUSH_INT);
-        emit_int(0);
     }
-    define_var(node.name);
-    Symbol s = get_var_symbol(node.name);
-    if (s.is_global) {
-        emit_opcode(ir::OpCode::STORE_GLOBAL);
-        emit_uint16(s.slot);
-    } else {
-        emit_opcode(ir::OpCode::STORE_VAR);
-        emit_byte((uint8_t)s.slot);
+    uint16_t size = 1;
+    if (node.type.kind == parser::DataType::Kind::Struct) {
+        size = m_structs.at(node.type.struct_name).total_size;
+    }
+    define_var(node.name, size);
+    if (node.init) {
+        Symbol s = get_var_symbol(node.name);
+        if (s.is_global) {
+            emit_opcode(ir::OpCode::STORE_GLOBAL);
+            emit_uint16(s.slot);
+        } else {
+            emit_opcode(ir::OpCode::STORE_VAR);
+            emit_byte((uint8_t)s.slot);
+        }
     }
 }
 
@@ -317,72 +437,232 @@ void IRGenerator::visit(const parser::VariableExpression &node) {
 }
 
 void IRGenerator::visit(const parser::AssignmentExpression &node) {
-    node.value->accept(*this);
-    Symbol s = get_var_symbol(node.lvalue->name);
-    if (s.is_global) {
-        emit_opcode(ir::OpCode::STORE_GLOBAL);
-        emit_uint16(s.slot);
+    node.value->accept(*this);  // Push value to store
+
+    struct LValueResolver : parser::ASTVisitor {
+        IRGenerator *gen;
+        enum Kind { Stack, Heap } kind = Stack;
+        uint16_t slot = 0;
+        bool is_global = false;
+        uint8_t offset = 0;
+
+        void visit(const parser::VariableExpression &v) override {
+            auto s = gen->get_var_symbol(v.name);
+            kind = Stack;
+            slot = s.slot;
+            is_global = s.is_global;
+        }
+
+        void visit(const parser::MemberAccessExpression &m) override {
+            m.object->accept(*this);
+            std::string struct_name;
+            bool is_ptr = false;
+            if (m.object->type->kind == parser::DataType::Kind::Ptr) {
+                struct_name = m.object->type->inner->struct_name;
+                is_ptr = true;
+            } else {
+                struct_name = m.object->type->struct_name;
+            }
+            uint8_t m_offset = gen->m_structs.at(struct_name).member_offsets.at(m.member_name);
+
+            if (kind == Stack) {
+                if (is_ptr) {
+                    if (is_global) {
+                        gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
+                        gen->emit_uint16(slot);
+                    } else {
+                        gen->emit_opcode(ir::OpCode::LOAD_VAR);
+                        gen->emit_byte((uint8_t)slot);
+                    }
+                    kind = Heap;
+                    offset = m_offset;
+                } else {
+                    slot += m_offset;
+                }
+            } else {
+                if (is_ptr) {
+                    gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
+                    gen->emit_byte(offset);
+                    offset = m_offset;
+                } else {
+                    offset += m_offset;
+                }
+            }
+        }
+    } resolver;
+    resolver.gen = this;
+    node.lvalue->accept(resolver);
+
+    if (resolver.kind == LValueResolver::Stack) {
+        if (resolver.is_global) {
+            emit_opcode(ir::OpCode::STORE_GLOBAL);
+            emit_uint16(resolver.slot);
+        } else {
+            emit_opcode(ir::OpCode::STORE_VAR);
+            emit_byte((uint8_t)resolver.slot);
+        }
     } else {
-        emit_opcode(ir::OpCode::STORE_VAR);
-        emit_byte((uint8_t)s.slot);
+        emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
+        emit_byte(resolver.offset);
     }
 }
 
 void IRGenerator::visit(const parser::IncrementExpression &node) {
-    Symbol s = get_var_symbol(node.lvalue->name);
-    if (s.is_global) {
-        emit_opcode(ir::OpCode::LOAD_GLOBAL);
-        emit_uint16(s.slot);
-    } else {
-        emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte((uint8_t)s.slot);
-    }
+    node.lvalue->accept(*this);  // Push current value
     emit_opcode(ir::OpCode::PUSH_INT);
     emit_int(1);
     emit_opcode(ir::OpCode::ADD);
-    if (s.is_global) {
-        emit_opcode(ir::OpCode::STORE_GLOBAL);
-        emit_uint16(s.slot);
+
+    struct LValueResolver : parser::ASTVisitor {
+        IRGenerator *gen;
+        enum Kind { Stack, Heap } kind = Stack;
+        uint16_t slot = 0;
+        bool is_global = false;
+        uint8_t offset = 0;
+
+        void visit(const parser::VariableExpression &v) override {
+            auto s = gen->get_var_symbol(v.name);
+            kind = Stack;
+            slot = s.slot;
+            is_global = s.is_global;
+        }
+
+        void visit(const parser::MemberAccessExpression &m) override {
+            m.object->accept(*this);
+            std::string struct_name;
+            bool is_ptr = false;
+            if (m.object->type->kind == parser::DataType::Kind::Ptr) {
+                struct_name = m.object->type->inner->struct_name;
+                is_ptr = true;
+            } else {
+                struct_name = m.object->type->struct_name;
+            }
+            uint8_t m_offset = gen->m_structs.at(struct_name).member_offsets.at(m.member_name);
+
+            if (kind == Stack) {
+                if (is_ptr) {
+                    if (is_global) {
+                        gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
+                        gen->emit_uint16(slot);
+                    } else {
+                        gen->emit_opcode(ir::OpCode::LOAD_VAR);
+                        gen->emit_byte((uint8_t)slot);
+                    }
+                    kind = Heap;
+                    offset = m_offset;
+                } else {
+                    slot += m_offset;
+                }
+            } else {
+                if (is_ptr) {
+                    gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
+                    gen->emit_byte(offset);
+                    offset = m_offset;
+                } else {
+                    offset += m_offset;
+                }
+            }
+        }
+    } resolver;
+    resolver.gen = this;
+    node.lvalue->accept(resolver);
+
+    if (resolver.kind == LValueResolver::Stack) {
+        if (resolver.is_global) {
+            emit_opcode(ir::OpCode::STORE_GLOBAL);
+            emit_uint16(resolver.slot);
+            emit_opcode(ir::OpCode::LOAD_GLOBAL);
+            emit_uint16(resolver.slot);
+        } else {
+            emit_opcode(ir::OpCode::STORE_VAR);
+            emit_byte((uint8_t)resolver.slot);
+            emit_opcode(ir::OpCode::LOAD_VAR);
+            emit_byte((uint8_t)resolver.slot);
+        }
     } else {
-        emit_opcode(ir::OpCode::STORE_VAR);
-        emit_byte((uint8_t)s.slot);
-    }
-    // Push result
-    if (s.is_global) {
-        emit_opcode(ir::OpCode::LOAD_GLOBAL);
-        emit_uint16(s.slot);
-    } else {
-        emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte((uint8_t)s.slot);
+        emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
+        emit_byte(resolver.offset);
+        // Reload for result
+        node.lvalue->accept(*this);
     }
 }
 
 void IRGenerator::visit(const parser::DecrementExpression &node) {
-    Symbol s = get_var_symbol(node.lvalue->name);
-    if (s.is_global) {
-        emit_opcode(ir::OpCode::LOAD_GLOBAL);
-        emit_uint16(s.slot);
-    } else {
-        emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte((uint8_t)s.slot);
-    }
+    node.lvalue->accept(*this);
     emit_opcode(ir::OpCode::PUSH_INT);
     emit_int(1);
     emit_opcode(ir::OpCode::SUB);
-    if (s.is_global) {
-        emit_opcode(ir::OpCode::STORE_GLOBAL);
-        emit_uint16(s.slot);
+
+    struct LValueResolver : parser::ASTVisitor {
+        IRGenerator *gen;
+        enum Kind { Stack, Heap } kind = Stack;
+        uint16_t slot = 0;
+        bool is_global = false;
+        uint8_t offset = 0;
+
+        void visit(const parser::VariableExpression &v) override {
+            auto s = gen->get_var_symbol(v.name);
+            kind = Stack;
+            slot = s.slot;
+            is_global = s.is_global;
+        }
+
+        void visit(const parser::MemberAccessExpression &m) override {
+            m.object->accept(*this);
+            std::string struct_name;
+            bool is_ptr = false;
+            if (m.object->type->kind == parser::DataType::Kind::Ptr) {
+                struct_name = m.object->type->inner->struct_name;
+                is_ptr = true;
+            } else {
+                struct_name = m.object->type->struct_name;
+            }
+            uint8_t m_offset = gen->m_structs.at(struct_name).member_offsets.at(m.member_name);
+
+            if (kind == Stack) {
+                if (is_ptr) {
+                    if (is_global) {
+                        gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
+                        gen->emit_uint16(slot);
+                    } else {
+                        gen->emit_opcode(ir::OpCode::LOAD_VAR);
+                        gen->emit_byte((uint8_t)slot);
+                    }
+                    kind = Heap;
+                    offset = m_offset;
+                } else {
+                    slot += m_offset;
+                }
+            } else {
+                if (is_ptr) {
+                    gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
+                    gen->emit_byte(offset);
+                    offset = m_offset;
+                } else {
+                    offset += m_offset;
+                }
+            }
+        }
+    } resolver;
+    resolver.gen = this;
+    node.lvalue->accept(resolver);
+
+    if (resolver.kind == LValueResolver::Stack) {
+        if (resolver.is_global) {
+            emit_opcode(ir::OpCode::STORE_GLOBAL);
+            emit_uint16(resolver.slot);
+            emit_opcode(ir::OpCode::LOAD_GLOBAL);
+            emit_uint16(resolver.slot);
+        } else {
+            emit_opcode(ir::OpCode::STORE_VAR);
+            emit_byte((uint8_t)resolver.slot);
+            emit_opcode(ir::OpCode::LOAD_VAR);
+            emit_byte((uint8_t)resolver.slot);
+        }
     } else {
-        emit_opcode(ir::OpCode::STORE_VAR);
-        emit_byte((uint8_t)s.slot);
-    }
-    // Push result
-    if (s.is_global) {
-        emit_opcode(ir::OpCode::LOAD_GLOBAL);
-        emit_uint16(s.slot);
-    } else {
-        emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte((uint8_t)s.slot);
+        emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
+        emit_byte(resolver.offset);
+        node.lvalue->accept(*this);
     }
 }
 
@@ -505,10 +785,11 @@ IRGenerator::Symbol IRGenerator::get_var_symbol(const std::string &name) {
     throw std::runtime_error("Undefined variable: " + name);
 }
 
-void IRGenerator::define_var(const std::string &name) {
+void IRGenerator::define_var(const std::string &name, uint16_t size) {
     if (m_scopes.empty()) throw std::runtime_error("Variable defined outside scope");
     auto &scope = m_scopes.back();
-    uint16_t slot = scope.next_slot++;
+    uint16_t slot = scope.next_slot;
+    scope.next_slot += size;
     scope.variables[name] = {slot, scope.is_global};
 }
 

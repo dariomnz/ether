@@ -26,6 +26,9 @@ struct ForStatement;
 struct VariableDeclaration;
 struct Function;
 struct Include;
+struct StructDeclaration;
+struct MemberAccessExpression;
+struct SizeofExpression;
 struct Program;
 
 struct ASTVisitor {
@@ -70,6 +73,12 @@ struct ASTVisitor {
     virtual void visit(const Function& node) {}
     virtual void visit(Include& node) { visit(static_cast<const Include&>(node)); }
     virtual void visit(const Include& node) {}
+    virtual void visit(StructDeclaration& node) { visit(static_cast<const StructDeclaration&>(node)); }
+    virtual void visit(const StructDeclaration& node) {}
+    virtual void visit(MemberAccessExpression& node) { visit(static_cast<const MemberAccessExpression&>(node)); }
+    virtual void visit(const MemberAccessExpression& node) {}
+    virtual void visit(SizeofExpression& node) { visit(static_cast<const SizeofExpression&>(node)); }
+    virtual void visit(const SizeofExpression& node) {}
     virtual void visit(Program& node) { visit(static_cast<const Program&>(node)); }
     virtual void visit(const Program& node) {}
 };
@@ -86,15 +95,18 @@ struct ASTNode {
 };
 
 struct DataType {
-    enum class Kind { Int, Coroutine, Void, Ptr, String };
+    enum class Kind { Int, Coroutine, Void, Ptr, String, Struct };
     Kind kind;
+    std::string struct_name;  // Only for Kind::Struct
     std::shared_ptr<DataType> inner;
 
     DataType() : kind(Kind::Int), inner(nullptr) {}
     explicit DataType(Kind k, std::shared_ptr<DataType> i = nullptr) : kind(k), inner(i) {}
+    DataType(Kind k, std::string name) : kind(k), struct_name(std::move(name)), inner(nullptr) {}
 
     bool operator==(const DataType& other) const {
         if (kind != other.kind) return false;
+        if (kind == Kind::Struct) return struct_name == other.struct_name;
         if (inner && other.inner) return *inner == *other.inner;
         return !inner && !other.inner;
     }
@@ -121,6 +133,9 @@ struct DataType {
                 break;
             case Kind::String:
                 s = "string";
+                break;
+            case Kind::Struct:
+                s = struct_name;
                 break;
         }
         if (inner) {
@@ -249,26 +264,26 @@ struct SpawnExpression : Expression {
 };
 
 struct AssignmentExpression : Expression {
-    std::unique_ptr<VariableExpression> lvalue;
+    std::unique_ptr<Expression> lvalue;
     std::unique_ptr<Expression> value;
-    AssignmentExpression(std::unique_ptr<VariableExpression> lv, std::unique_ptr<Expression> v, std::string fn, int l,
-                         int c, int len)
+    AssignmentExpression(std::unique_ptr<Expression> lv, std::unique_ptr<Expression> v, std::string fn, int l, int c,
+                         int len)
         : Expression(std::move(fn), l, c, len), lvalue(std::move(lv)), value(std::move(v)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
     void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct IncrementExpression : Expression {
-    std::unique_ptr<VariableExpression> lvalue;
-    IncrementExpression(std::unique_ptr<VariableExpression> lv, std::string fn, int l, int c, int len)
+    std::unique_ptr<Expression> lvalue;
+    IncrementExpression(std::unique_ptr<Expression> lv, std::string fn, int l, int c, int len)
         : Expression(std::move(fn), l, c, len), lvalue(std::move(lv)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
     void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
 struct DecrementExpression : Expression {
-    std::unique_ptr<VariableExpression> lvalue;
-    DecrementExpression(std::unique_ptr<VariableExpression> lv, std::string fn, int l, int c, int len)
+    std::unique_ptr<Expression> lvalue;
+    DecrementExpression(std::unique_ptr<Expression> lv, std::string fn, int l, int c, int len)
         : Expression(std::move(fn), l, c, len), lvalue(std::move(lv)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
     void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
@@ -278,6 +293,23 @@ struct AwaitExpression : Expression {
     std::unique_ptr<Expression> expr;
     AwaitExpression(std::unique_ptr<Expression> e, std::string fn, int l, int c, int len)
         : Expression(std::move(fn), l, c, len), expr(std::move(e)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
+};
+
+struct SizeofExpression : Expression {
+    DataType target_type;
+    SizeofExpression(DataType t, std::string fn, int l, int c, int len)
+        : Expression(std::move(fn), l, c, len), target_type(t) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
+};
+
+struct MemberAccessExpression : Expression {
+    std::unique_ptr<Expression> object;
+    std::string member_name;
+    MemberAccessExpression(std::unique_ptr<Expression> obj, std::string mem, std::string fn, int l, int c, int len)
+        : Expression(std::move(fn), l, c, len), object(std::move(obj)), member_name(std::move(mem)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
     void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
@@ -351,8 +383,20 @@ struct Include : ASTNode {
     void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
+struct StructDeclaration : ASTNode {
+    std::string name;
+    int name_line;
+    int name_col;
+    std::vector<Parameter> members;
+    StructDeclaration(std::string n, int nl, int nc, std::vector<Parameter> m, std::string fn, int l, int c, int len)
+        : ASTNode(std::move(fn), l, c, len), name(std::move(n)), name_line(nl), name_col(nc), members(std::move(m)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
+};
+
 struct Program : ASTNode {
     std::vector<std::unique_ptr<Include>> includes;
+    std::vector<std::unique_ptr<StructDeclaration>> structs;
     std::vector<std::unique_ptr<VariableDeclaration>> globals;
     std::vector<std::unique_ptr<Function>> functions;
     Program() : ASTNode("", 0, 0) {}

@@ -15,7 +15,7 @@ static const std::unordered_map<std::string_view, TokenType> keywords = {
     {"else", TokenType::Else},     {"while", TokenType::While},         {"for", TokenType::For},
     {"string", TokenType::String}, {"spawn", TokenType::Spawn},         {"yield", TokenType::Yield},
     {"await", TokenType::Await},   {"coroutine", TokenType::Coroutine}, {"ptr", TokenType::Ptr},
-    {"void", TokenType::Void}};
+    {"void", TokenType::Void},     {"struct", TokenType::Struct},       {"sizeof", TokenType::Sizeof}};
 
 Lexer::Lexer(std::string_view source, std::string filename) : m_source(source), m_filename(std::move(filename)) {}
 
@@ -171,7 +171,7 @@ Token Lexer::next_token() {
                 // If it's only two dots, we could error or return unknown.
                 // For now, let's treat it as unknown or just continue.
             }
-            return {TokenType::Unknown, ".", start_line, start_col};
+            return {TokenType::Dot, ".", start_line, start_col};
         }
         case '(':
             return {TokenType::LParent, lexeme, start_line, start_col};

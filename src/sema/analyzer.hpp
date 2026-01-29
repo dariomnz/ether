@@ -32,7 +32,10 @@ class Analyzer : public parser::ASTVisitor {
     void visit(parser::ForStatement &node) override;
     void visit(parser::VariableDeclaration &node) override;
     void visit(parser::Function &node) override;
+    void visit(parser::StructDeclaration &node) override;
     void visit(parser::Program &node) override;
+    void visit(parser::MemberAccessExpression &node) override;
+    void visit(parser::SizeofExpression &node) override;
 
    private:
     struct Symbol {
@@ -57,8 +60,15 @@ class Analyzer : public parser::ASTVisitor {
         int col;
     };
 
+    struct StructInfo {
+        std::string name;
+        std::unordered_map<std::string, std::pair<parser::DataType, uint16_t>> members;
+        uint16_t total_size;
+    };
+
     std::vector<Scope> m_scopes;
     std::unordered_map<std::string, FunctionInfo> m_functions;
+    std::unordered_map<std::string, StructInfo> m_structs;
     parser::DataType m_current_type;
 
     void push_scope();

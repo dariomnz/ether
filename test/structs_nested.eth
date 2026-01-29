@@ -1,0 +1,30 @@
+// EXPECTED_OUTPUT: Outer: 1, 10, 20, 2
+// EXPECTED_OUTPUT: Updated: 1, 11, 40, 2
+
+#include "std/io.eth"
+
+struct Inner {
+    int a;
+    int b;
+}
+
+struct Outer {
+    int x;
+    Inner in;
+    int y;
+}
+
+void main() {
+    Outer o;
+    o.x = 1;
+    o.in.a = 10;
+    o.in.b = 20;
+    o.y = 2;
+    
+    printf("Outer: %d, %d, %d, %d\n", o.x, o.in.a, o.in.b, o.y);
+    
+    o.in.a++;
+    o.in.b = o.in.b * 2;
+    
+    printf("Updated: %d, %d, %d, %d\n", o.x, o.in.a, o.in.b, o.y);
+}

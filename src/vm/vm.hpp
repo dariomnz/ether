@@ -34,6 +34,8 @@ struct Value {
 
     std::string_view as_string() const { return std::string_view(as.str, str_len); }
 };
+// Asssegure that Value is 16 bytes
+static_assert(sizeof(Value) == 16);
 
 inline std::ostream& operator<<(std::ostream& os, const Value& val) {
     if (val.type == ValueType::Int) {

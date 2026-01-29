@@ -51,10 +51,10 @@ int printf(string fmt, ...) {
     return syscall(SYS_PRINTF, fmt, ...);
 }
 
-ptr(int) malloc(int size) {
+ptr malloc(int size) {
     return syscall(SYS_MALLOC, size);
 }
 
-int free(ptr(int) p) {
+int free(ptr p) {
     return syscall(SYS_FREE, p);
 }
