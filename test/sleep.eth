@@ -21,8 +21,8 @@ int task(int id, int ms) {
 int main() {
     printf("Starting sleep test...\n");
     
-    coroutine t1 = spawn task(1, 1);
-    coroutine t2 = spawn task(2, 50);
+    coroutine(int) t1 = spawn task(1, 1);
+    coroutine(int) t2 = spawn task(2, 50);
 
     printf("Waiting for tasks...\n");
     int res1 = await t1;

@@ -26,8 +26,8 @@ int worker(int id, int count) {
 
 int main() {
     printf("Starting worker...\n");
-    coroutine h1 = spawn worker(1, 5);
-    coroutine h2 = spawn worker(2, 3);
+    coroutine(int) h1 = spawn worker(1, 5);
+    coroutine(int) h2 = spawn worker(2, 3);
     
     printf("Waiting for worker 1...\n");
     int res1 = await h1;

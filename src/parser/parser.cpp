@@ -36,12 +36,33 @@ bool Parser::match(lexer::TokenType type) {
 }
 
 DataType Parser::parse_type() {
-    if (match(lexer::TokenType::Int)) return DataType(DataType::Kind::Int);
-    if (match(lexer::TokenType::Coroutine)) return DataType(DataType::Kind::Coroutine);
-    if (match(lexer::TokenType::Ptr)) return DataType(DataType::Kind::Ptr);
-    if (match(lexer::TokenType::Void)) return DataType(DataType::Kind::Void);
-    const auto &err_token = peek();
-    throw CompilerError("Expected type", m_filename, err_token.line, err_token.column, (int)err_token.lexeme.size());
+    DataType::Kind kind;
+    if (match(lexer::TokenType::Int))
+        kind = DataType::Kind::Int;
+    else if (match(lexer::TokenType::Coroutine))
+        kind = DataType::Kind::Coroutine;
+    else if (match(lexer::TokenType::Ptr))
+        kind = DataType::Kind::Ptr;
+    else if (match(lexer::TokenType::String))
+        kind = DataType::Kind::String;
+    else if (match(lexer::TokenType::Void))
+        kind = DataType::Kind::Void;
+    else {
+        const auto &err_token = peek();
+        throw CompilerError("Expected type", m_filename, err_token.line, err_token.column,
+                            (int)err_token.lexeme.size());
+    }
+
+    std::shared_ptr<DataType> inner = nullptr;
+    if (match(lexer::TokenType::LParent)) {
+        inner = std::make_shared<DataType>(parse_type());
+        if (!match(lexer::TokenType::RParent)) {
+            const auto &err_token = peek();
+            throw CompilerError("Expected ')' after generic type", m_filename, err_token.line, err_token.column,
+                                (int)err_token.lexeme.size());
+        }
+    }
+    return DataType(kind, inner);
 }
 
 std::unique_ptr<Program> Parser::parse_program() {
@@ -73,8 +94,9 @@ void Parser::parse_top_level(Program &program) {
         }
         std::string resolved_path = absolute_path.lexically_normal().string();
 
+        int len = (int)(path_token.column - include_token.column) + (int)path_token.lexeme.size();
         program.includes.push_back(
-            std::make_unique<Include>(resolved_path, m_filename, include_token.line, include_token.column));
+            std::make_unique<Include>(resolved_path, m_filename, include_token.line, include_token.column, len));
 
         // Recursive parse
         std::ifstream file(resolved_path);
@@ -136,9 +158,12 @@ void Parser::parse_top_level(Program &program) {
         }
 
         auto body = parse_block();
-        program.functions.push_back(
-            std::make_unique<Function>(type, std::string(name), name_token.line, name_token.column, std::move(params),
-                                       is_variadic, std::move(body), m_filename, start_token.line, start_token.column));
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column);  // rough estimate
+        if (len < 1) len = (int)name.size();
+
+        program.functions.push_back(std::make_unique<Function>(
+            type, std::string(name), name_token.line, name_token.column, std::move(params), is_variadic,
+            std::move(body), m_filename, start_token.line, start_token.column, len));
     } else {
         // It's a global variable
         std::unique_ptr<Expression> init = nullptr;
@@ -150,9 +175,10 @@ void Parser::parse_top_level(Program &program) {
             throw CompilerError("Expected ';' after global variable declaration", m_filename, token.line, token.column,
                                 (int)token.lexeme.size());
         }
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column);
         program.globals.push_back(std::make_unique<VariableDeclaration>(type, name, name_token.line, name_token.column,
                                                                         std::move(init), m_filename, start_token.line,
-                                                                        start_token.column));
+                                                                        start_token.column, len));
     }
 }
 
@@ -196,9 +222,10 @@ std::unique_ptr<Function> Parser::parse_function() {
     }
 
     auto body = parse_block();
+    int len = (int)(m_tokens[m_pos - 1].column - start_token.column);
     return std::make_unique<Function>(return_type, std::string(name), name_token.line, name_token.column,
                                       std::move(params), is_variadic, std::move(body), m_filename, start_token.line,
-                                      start_token.column);
+                                      start_token.column, len);
 }
 
 std::unique_ptr<Block> Parser::parse_block() {
@@ -216,7 +243,7 @@ std::unique_ptr<Block> Parser::parse_block() {
         const auto &token = peek();
         throw CompilerError("Expected '}' after block", m_filename, token.line, token.column);
     }
-
+    block->length = (int)(m_tokens[m_pos - 1].column - start_token.column) + 1;
     return block;
 }
 
@@ -234,8 +261,9 @@ std::unique_ptr<Statement> Parser::parse_statement() {
         if (match(lexer::TokenType::Else)) {
             else_branch = parse_block();
         }
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column);
         return std::make_unique<IfStatement>(std::move(condition), std::move(then_branch), std::move(else_branch),
-                                             m_filename, start_token.line, start_token.column);
+                                             m_filename, start_token.line, start_token.column, len);
     }
 
     if (match(lexer::TokenType::For)) {
@@ -262,8 +290,9 @@ std::unique_ptr<Statement> Parser::parse_statement() {
         }
 
         auto body = parse_block();
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column);
         return std::make_unique<ForStatement>(std::move(init), std::move(condition), std::move(increment),
-                                              std::move(body), m_filename, start_token.line, start_token.column);
+                                              std::move(body), m_filename, start_token.line, start_token.column, len);
     }
 
     if (match(lexer::TokenType::Return)) {
@@ -273,11 +302,13 @@ std::unique_ptr<Statement> Parser::parse_statement() {
             throw CompilerError("Expected ';' after return", m_filename, token.line, token.column,
                                 (int)token.lexeme.size());
         }
-        return std::make_unique<ReturnStatement>(std::move(expr), m_filename, start_token.line, start_token.column);
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + 1;
+        return std::make_unique<ReturnStatement>(std::move(expr), m_filename, start_token.line, start_token.column,
+                                                 len);
     }
 
     if (check(lexer::TokenType::Int) || check(lexer::TokenType::Coroutine) || check(lexer::TokenType::Ptr) ||
-        check(lexer::TokenType::Void)) {
+        check(lexer::TokenType::Void) || check(lexer::TokenType::String)) {
         DataType type = parse_type();
         if (!check(lexer::TokenType::Identifier)) {
             const auto &token = peek();
@@ -295,8 +326,10 @@ std::unique_ptr<Statement> Parser::parse_statement() {
             throw CompilerError("Expected ';' after declaration", m_filename, token.line, token.column,
                                 (int)token.lexeme.size());
         }
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + 1;
         return std::make_unique<VariableDeclaration>(type, std::string(name), name_token.line, name_token.column,
-                                                     std::move(init), m_filename, start_token.line, start_token.column);
+                                                     std::move(init), m_filename, start_token.line, start_token.column,
+                                                     len);
     }
 
     if (match(lexer::TokenType::Yield)) {
@@ -305,7 +338,8 @@ std::unique_ptr<Statement> Parser::parse_statement() {
             throw CompilerError("Expected ';' after yield", m_filename, token.line, token.column,
                                 (int)token.lexeme.size());
         }
-        return std::make_unique<YieldStatement>(m_filename, start_token.line, start_token.column);
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + 1;
+        return std::make_unique<YieldStatement>(m_filename, start_token.line, start_token.column, len);
     }
 
     // Expression statement as fallback
@@ -315,7 +349,9 @@ std::unique_ptr<Statement> Parser::parse_statement() {
         throw CompilerError("Expected ';' after expression", m_filename, token.line, token.column,
                             (int)token.lexeme.size());
     }
-    return std::make_unique<ExpressionStatement>(std::move(expr), m_filename, start_token.line, start_token.column);
+    int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + 1;
+    return std::make_unique<ExpressionStatement>(std::move(expr), m_filename, start_token.line, start_token.column,
+                                                 len);
 }
 
 std::unique_ptr<Expression> Parser::parse_expression() {
@@ -325,32 +361,41 @@ std::unique_ptr<Expression> Parser::parse_expression() {
         if (m_pos + 1 < m_tokens.size()) {
             if (m_tokens[m_pos + 1].type == lexer::TokenType::Equal) {
                 const auto &id_token = advance();
-                auto lvalue = std::make_unique<VariableExpression>(std::string(id_token.lexeme), m_filename,
-                                                                   id_token.line, id_token.column);
+                auto lvalue =
+                    std::make_unique<VariableExpression>(std::string(id_token.lexeme), m_filename, id_token.line,
+                                                         id_token.column, (int)id_token.lexeme.size());
                 advance();  // skip '='
+                int len = (int)(m_tokens[m_pos - 1].column - start_token.column);
                 return std::make_unique<AssignmentExpression>(std::move(lvalue), parse_expression(), m_filename,
-                                                              start_token.line, start_token.column);
+                                                              start_token.line, start_token.column, len);
             }
             if (m_tokens[m_pos + 1].type == lexer::TokenType::PlusPlus) {
                 const auto &id_token = advance();
-                auto lvalue = std::make_unique<VariableExpression>(std::string(id_token.lexeme), m_filename,
-                                                                   id_token.line, id_token.column);
+                auto lvalue =
+                    std::make_unique<VariableExpression>(std::string(id_token.lexeme), m_filename, id_token.line,
+                                                         id_token.column, (int)id_token.lexeme.size());
                 advance();  // skip '++'
-                return std::make_unique<IncrementExpression>(std::move(lvalue), m_filename, start_token.line,
-                                                             start_token.column);
+                return std::make_unique<IncrementExpression>(
+                    std::move(lvalue), m_filename, start_token.line, start_token.column,
+                    (int)m_tokens[m_pos - 1].lexeme.size() + (int)id_token.lexeme.size());
             }
             if (m_tokens[m_pos + 1].type == lexer::TokenType::MinusMinus) {
                 const auto &id_token = advance();
-                auto lvalue = std::make_unique<VariableExpression>(std::string(id_token.lexeme), m_filename,
-                                                                   id_token.line, id_token.column);
+                auto lvalue =
+                    std::make_unique<VariableExpression>(std::string(id_token.lexeme), m_filename, id_token.line,
+                                                         id_token.column, (int)id_token.lexeme.size());
                 advance();  // skip '--'
-                return std::make_unique<DecrementExpression>(std::move(lvalue), m_filename, start_token.line,
-                                                             start_token.column);
+                return std::make_unique<DecrementExpression>(
+                    std::move(lvalue), m_filename, start_token.line, start_token.column,
+                    (int)m_tokens[m_pos - 1].lexeme.size() + (int)id_token.lexeme.size());
             }
         }
     }
     if (match(lexer::TokenType::Await)) {
-        return std::make_unique<AwaitExpression>(parse_expression(), m_filename, start_token.line, start_token.column);
+        auto expr = parse_expression();
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
+        return std::make_unique<AwaitExpression>(std::move(expr), m_filename, start_token.line, start_token.column,
+                                                 len);
     }
     if (match(lexer::TokenType::Spawn)) {
         auto expr = parse_expression();
@@ -368,7 +413,8 @@ std::unique_ptr<Expression> Parser::parse_expression() {
             throw CompilerError("Expected function call after spawn", m_filename, token.line, token.column);
         }
         auto call = std::unique_ptr<FunctionCall>(static_cast<FunctionCall *>(expr.release()));
-        return std::make_unique<SpawnExpression>(std::move(call), m_filename, line, col);
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
+        return std::make_unique<SpawnExpression>(std::move(call), m_filename, line, col, len);
     }
     return parse_comparison();
 }
@@ -403,8 +449,9 @@ std::unique_ptr<Expression> Parser::parse_comparison() {
                 throw CompilerError("Unknown comparison operator", m_filename, op_token_info.line,
                                     op_token_info.column);
         }
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
         left = std::make_unique<BinaryExpression>(op, std::move(left), std::move(right), m_filename, start_token.line,
-                                                  start_token.column);
+                                                  start_token.column, len);
     }
 
     return left;
@@ -419,8 +466,9 @@ std::unique_ptr<Expression> Parser::parse_addition() {
         auto right = parse_multiplication();
         BinaryExpression::Op op =
             (op_token == lexer::TokenType::Plus) ? BinaryExpression::Op::Add : BinaryExpression::Op::Sub;
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
         left = std::make_unique<BinaryExpression>(op, std::move(left), std::move(right), m_filename, start_token.line,
-                                                  start_token.column);
+                                                  start_token.column, len);
     }
 
     return left;
@@ -435,8 +483,9 @@ std::unique_ptr<Expression> Parser::parse_multiplication() {
         auto right = parse_primary();
         BinaryExpression::Op op =
             (op_token == lexer::TokenType::Star) ? BinaryExpression::Op::Mul : BinaryExpression::Op::Div;
+        int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
         left = std::make_unique<BinaryExpression>(op, std::move(left), std::move(right), m_filename, start_token.line,
-                                                  start_token.column);
+                                                  start_token.column, len);
     }
 
     return left;
@@ -445,12 +494,14 @@ std::unique_ptr<Expression> Parser::parse_multiplication() {
 std::unique_ptr<Expression> Parser::parse_primary() {
     const auto &token = peek();
     if (match(lexer::TokenType::IntegerLiteral)) {
-        int val = std::stoi(std::string(m_tokens[m_pos - 1].lexeme));
-        return std::make_unique<IntegerLiteral>(val, m_filename, token.line, token.column);
+        const auto &tok = m_tokens[m_pos - 1];
+        int val = std::stoi(std::string(tok.lexeme));
+        return std::make_unique<IntegerLiteral>(val, m_filename, token.line, token.column, (int)tok.lexeme.size());
     }
     if (match(lexer::TokenType::StringLiteral)) {
-        return std::make_unique<StringLiteral>(std::string(m_tokens[m_pos - 1].lexeme), m_filename, token.line,
-                                               token.column);
+        const auto &tok = m_tokens[m_pos - 1];
+        return std::make_unique<StringLiteral>(std::string(tok.lexeme), m_filename, token.line, token.column,
+                                               (int)tok.lexeme.size());
     }
     if (match(lexer::TokenType::Identifier)) {
         std::string name = std::string(m_tokens[m_pos - 1].lexeme);
@@ -459,8 +510,9 @@ std::unique_ptr<Expression> Parser::parse_primary() {
             if (!check(lexer::TokenType::RParent)) {
                 do {
                     if (match(lexer::TokenType::Ellipsis)) {
-                        args.push_back(std::make_unique<VarargExpression>(m_filename, m_tokens[m_pos - 1].line,
-                                                                          m_tokens[m_pos - 1].column));
+                        const auto &el_tok = m_tokens[m_pos - 1];
+                        args.push_back(std::make_unique<VarargExpression>(m_filename, el_tok.line, el_tok.column,
+                                                                          (int)el_tok.lexeme.size()));
                     } else {
                         args.push_back(parse_expression());
                     }
@@ -471,10 +523,12 @@ std::unique_ptr<Expression> Parser::parse_primary() {
                 throw CompilerError("Expected ')' after arguments", m_filename, err_tok.line, err_tok.column,
                                     (int)err_tok.lexeme.size());
             }
+            int len = (int)(m_tokens[m_pos - 1].column - token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
             return std::make_unique<FunctionCall>(std::move(name), std::move(args), m_filename, token.line,
-                                                  token.column);
+                                                  token.column, len);
         }
-        return std::make_unique<VariableExpression>(std::move(name), m_filename, token.line, token.column);
+        return std::make_unique<VariableExpression>(std::move(name), m_filename, token.line, token.column,
+                                                    (int)name.size());
     }
     if (match(lexer::TokenType::LParent)) {
         auto expr = parse_expression();

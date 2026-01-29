@@ -27,23 +27,23 @@ int sleep(int ms) {
     return syscall(SYS_SLEEP, ms);
 }
 
-coroutine co_open(string path, int flags, int mode) {
+coroutine(int) co_open(string path, int flags, int mode) {
     return spawn syscall(SYS_OPEN, 0, path, flags, mode);
 }
 
-coroutine co_read(int fd, int buf, int size) {
+coroutine(int) co_read(int fd, int buf, int size) {
     return spawn syscall(SYS_READ, fd, buf, size, 0);
 }
 
-coroutine co_write(int fd, string buf, int size) {
+coroutine(int) co_write(int fd, string buf, int size) {
     return spawn syscall(SYS_WRITE, fd, buf, size, 0);
 }
 
-coroutine co_close(int fd) {
+coroutine(int) co_close(int fd) {
     return spawn syscall(SYS_CLOSE, fd);
 }
 
-coroutine co_sleep(int ms) {
+coroutine(int) co_sleep(int ms) {
     return spawn syscall(SYS_SLEEP, ms);
 }
 
@@ -51,10 +51,10 @@ int printf(string fmt, ...) {
     return syscall(SYS_PRINTF, fmt, ...);
 }
 
-ptr malloc(int size) {
+ptr(int) malloc(int size) {
     return syscall(SYS_MALLOC, size);
 }
 
-int free(ptr p) {
+int free(ptr(int) p) {
     return syscall(SYS_FREE, p);
 }

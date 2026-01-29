@@ -64,7 +64,9 @@ void Analyzer::visit(VariableDeclaration &node) {
             // Allow assigning 0 to pointers
             bool is_null_ptr = (node.type.kind == DataType::Kind::Ptr && init_type.kind == DataType::Kind::Int);
             if (!is_null_ptr) {
-                throw CompilerError("Type mismatch in variable declaration", node.filename, node.line, node.column);
+                throw CompilerError("Type mismatch in variable declaration: expected " + node.type.to_string() +
+                                        ", but got " + init_type.to_string(),
+                                    node.filename, node.line, node.column, node.length);
             }
         }
     }
@@ -98,15 +100,14 @@ void Analyzer::visit(IntegerLiteral &node) {
 }
 
 void Analyzer::visit(StringLiteral &node) {
-    m_current_type = DataType(DataType::Kind::Int);  // strings are ints for now
+    m_current_type = DataType(DataType::Kind::String);
     node.type = std::make_unique<DataType>(m_current_type);
 }
 
 void Analyzer::visit(VariableExpression &node) {
     const Symbol *sym = lookup_symbol(node.name);
     if (!sym) {
-        throw CompilerError("Undefined variable: " + node.name, node.filename, node.line, node.column,
-                            (int)node.name.size());
+        throw CompilerError("Undefined variable: " + node.name, node.filename, node.line, node.column, node.length);
     }
     node.decl_filename = sym->filename;
     node.decl_line = sym->line;
@@ -126,7 +127,7 @@ void Analyzer::visit(BinaryExpression &node) {
 
     if (!left_ok || !right_ok) {
         throw CompilerError("Binary operations are only supported for integers and pointers", node.filename, node.line,
-                            node.column);
+                            node.column, node.length);
     }
     m_current_type = DataType(DataType::Kind::Int);
     node.type = std::make_unique<DataType>(m_current_type);
@@ -134,19 +135,18 @@ void Analyzer::visit(BinaryExpression &node) {
 
 void Analyzer::visit(FunctionCall &node) {
     if (m_functions.find(node.name) == m_functions.end()) {
-        throw CompilerError("Undefined function: " + node.name, node.filename, node.line, node.column,
-                            (int)node.name.size());
+        throw CompilerError("Undefined function: " + node.name, node.filename, node.line, node.column, node.length);
     }
     const auto &info = m_functions[node.name];
     if (info.is_variadic) {
         if (node.args.size() < info.param_types.size()) {
             throw CompilerError("Too few arguments for variadic function " + node.name, node.filename, node.line,
-                                node.column, (int)node.name.size());
+                                node.column, node.length);
         }
     } else {
         if (node.args.size() != info.param_types.size()) {
             throw CompilerError("Wrong number of arguments for " + node.name, node.filename, node.line, node.column,
-                                (int)node.name.size());
+                                node.length);
         }
     }
     node.decl_filename = info.filename;
@@ -169,18 +169,23 @@ void Analyzer::visit(VarargExpression &node) {
 
 void Analyzer::visit(SpawnExpression &node) {
     node.call->accept(*this);
-    m_current_type = DataType(DataType::Kind::Coroutine);
+    // m_current_type is the return type of the function being spawned
+    m_current_type = DataType(DataType::Kind::Coroutine, std::make_shared<DataType>(m_current_type));
     node.type = std::make_unique<DataType>(m_current_type);
 }
 
 void Analyzer::visit(AwaitExpression &node) {
     node.expr->accept(*this);
     DataType target_type = m_current_type;
-    if (!(target_type == DataType(DataType::Kind::Coroutine))) {
-        throw CompilerError("Semantic Error: 'await' expects a coroutine handle, but got another type.", node.filename,
-                            node.line, node.column);
+    if (target_type.kind != DataType::Kind::Coroutine) {
+        throw CompilerError("Semantic Error: 'await' expects a coroutine handle, but got " + target_type.to_string(),
+                            node.filename, node.line, node.column, node.length);
     }
-    m_current_type = DataType(DataType::Kind::Int);
+    if (target_type.inner) {
+        m_current_type = *target_type.inner;
+    } else {
+        m_current_type = DataType(DataType::Kind::Int);  // Fallback
+    }
     node.type = std::make_unique<DataType>(m_current_type);
 }
 
@@ -191,7 +196,9 @@ void Analyzer::visit(AssignmentExpression &node) {
     DataType lval_type = m_current_type;
 
     if (!(val_type == lval_type)) {
-        throw CompilerError("Type mismatch in assignment", node.filename, node.line, node.column);
+        throw CompilerError(
+            "Type mismatch in assignment: expected " + lval_type.to_string() + ", but got " + val_type.to_string(),
+            node.filename, node.line, node.column, node.length);
     }
     m_current_type = lval_type;
     node.type = std::make_unique<DataType>(m_current_type);

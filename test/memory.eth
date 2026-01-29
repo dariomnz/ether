@@ -3,7 +3,7 @@
 #include "std/io.eth"
 
 int main() {
-    ptr p = malloc(100);
+    ptr(int) p = malloc(100);
     printf("Get from malloc: %p\n", p);
     if (p == 0) {
         return 1;

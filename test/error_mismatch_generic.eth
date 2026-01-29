@@ -1,0 +1,6 @@
+// EXPECTED_OUTPUT: Type mismatch in variable declaration: expected int, but got coroutine(int)
+int main() {
+    coroutine(int) c = spawn main();
+    int x = c;
+    return 0;
+}

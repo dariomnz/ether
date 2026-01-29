@@ -203,20 +203,6 @@ void LSPServer::on_did_change(const std::string& params) {
     on_did_open(params);
 }
 
-static std::string type_to_string(const ether::parser::DataType& type) {
-    switch (type.kind) {
-        case ether::parser::DataType::Kind::Int:
-            return "int";
-        case ether::parser::DataType::Kind::Coroutine:
-            return "coroutine";
-        case ether::parser::DataType::Kind::Void:
-            return "void";
-        case ether::parser::DataType::Kind::Ptr:
-            return "ptr";
-    }
-    return "unknown";
-}
-
 struct NodeFinder : public ASTVisitor {
     int line;
     int col;
@@ -255,9 +241,11 @@ struct NodeFinder : public ASTVisitor {
             def_size = (int)node.name.size();
 
             std::stringstream ss;
-            ss << "(function) " << type_to_string(node.return_type) << " " << node.name << "(";
+            ss << "(function) " << node.return_type << " " << node.name << "(";
             for (size_t i = 0; i < node.params.size(); ++i) {
-                ss << type_to_string(node.params[i].type) << " " << node.params[i].name;
+                std::cerr << "[LSP] Found function param " << node.params[i].name << " type "
+                          << node.params[i].type << std::endl;
+                ss << node.params[i].type << " " << node.params[i].name;
                 if (i < node.params.size() - 1 || node.is_variadic) ss << ", ";
             }
             if (node.is_variadic) ss << "...";
@@ -286,7 +274,7 @@ struct NodeFinder : public ASTVisitor {
             def_line = node.name_line;
             def_col = node.name_col;
             def_size = (int)node.name.size();
-            hover_info = "(variable) " + type_to_string(node.type) + " " + node.name;
+            hover_info = "(variable) " + node.type.to_string() + " " + node.name;
             return;
         }
         if (node.init) node.init->accept(*this);
@@ -305,11 +293,11 @@ struct NodeFinder : public ASTVisitor {
             std::stringstream ss;
             ss << "(call) ";
             if (node.type) {
-                ss << type_to_string(*node.type) << " ";
+                ss << node.type << " ";
             }
             ss << node.name << "(";
             for (size_t i = 0; i < node.param_types.size(); ++i) {
-                ss << type_to_string(node.param_types[i]);
+                ss << node.param_types[i];
                 if (i < node.param_types.size() - 1 || node.is_variadic) ss << ", ";
             }
             if (node.is_variadic) ss << "...";
@@ -334,7 +322,7 @@ struct NodeFinder : public ASTVisitor {
             def_col = node.decl_col;
             def_size = (int)node.name.size();
             if (node.type) {
-                hover_info = "(variable) " + type_to_string(*node.type) + " " + node.name;
+                hover_info = "(variable) " + node.type->to_string() + " " + node.name;
             } else {
                 hover_info = "(variable) " + node.name;
             }

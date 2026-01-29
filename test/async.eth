@@ -23,8 +23,8 @@ int task(int id) {
 
 int main() {
     printf("Writing to terminal async...\n");
-    coroutine t1 = spawn task(1);
-    coroutine t2 = spawn task(2);
+    coroutine(int) t1 = spawn task(1);
+    coroutine(int) t2 = spawn task(2);
     await t1;
     await t2;
     int written = await co_write(1, "Hello from io_uring!\n", 21);
