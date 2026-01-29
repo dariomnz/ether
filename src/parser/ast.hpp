@@ -351,6 +351,10 @@ struct VariableDeclaration : Statement {
 struct Parameter {
     DataType type;
     std::string name;
+    int line;
+    int col;
+    int name_line;
+    int name_col;
 };
 
 struct Function : Expression {

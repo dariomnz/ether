@@ -212,6 +212,36 @@ struct NodeFinder : public ASTVisitor {
     int def_col = 0;
     int def_size = 0;
     std::string hover_info = "";
+    Program* root_program = nullptr;
+    std::string target_filename = "";
+
+    std::string find_struct_in_type(const DataType& type) {
+        if (type.kind == DataType::Kind::Struct) return type.struct_name;
+        if (type.inner) return find_struct_in_type(*type.inner);
+        return "";
+    }
+
+    void resolve_struct(const std::string& name) {
+        if (!root_program) return;
+        for (const auto& s : root_program->structs) {
+            if (s->name == name) {
+                found = true;
+                def_filename = s->filename;
+                def_line = s->name_line;
+                def_col = s->name_col;
+                def_size = (int)s->name.size();
+
+                std::stringstream ss;
+                ss << "struct " << s->name << " {\n";
+                for (const auto& m : s->members) {
+                    ss << "  " << m.type.to_string() << " " << m.name << ";\n";
+                }
+                ss << "}";
+                hover_info = ss.str();
+                return;
+            }
+        }
+    }
 
     void visit(Program& node) override {
         debug_msg("Visiting program " << node.filename);
@@ -223,6 +253,10 @@ struct NodeFinder : public ASTVisitor {
             if (found) return;
             g->accept(*this);
         }
+        for (auto& s : node.structs) {
+            if (found) return;
+            s->accept(*this);
+        }
         for (auto& f : node.functions) {
             if (found) return;
             f->accept(*this);
@@ -230,9 +264,10 @@ struct NodeFinder : public ASTVisitor {
     }
 
     void visit(Function& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting function " << node.name << " at " << node.filename << ":" << node.line << ":"
                                        << node.column);
-        if (found) return;
+
         if (node.name_line == line && col >= node.name_col && col < node.name_col + (int)node.name.size()) {
             found = true;
             def_filename = node.filename;
@@ -243,8 +278,6 @@ struct NodeFinder : public ASTVisitor {
             std::stringstream ss;
             ss << "(function) " << node.return_type << " " << node.name << "(";
             for (size_t i = 0; i < node.params.size(); ++i) {
-                std::cerr << "[LSP] Found function param " << node.params[i].name << " type "
-                          << node.params[i].type << std::endl;
                 ss << node.params[i].type << " " << node.params[i].name;
                 if (i < node.params.size() - 1 || node.is_variadic) ss << ", ";
             }
@@ -253,10 +286,21 @@ struct NodeFinder : public ASTVisitor {
             hover_info = ss.str();
             return;
         }
+
+        // Return type
+        if (node.line == line && col >= node.column && col < node.name_col) {
+            std::string s_name = find_struct_in_type(node.return_type);
+            if (!s_name.empty()) {
+                resolve_struct(s_name);
+                if (found) return;
+            }
+        }
+
         if (node.body) node.body->accept(*this);
     }
 
     void visit(Block& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting block at " << node.filename << ":" << node.line << ":" << node.column);
         for (auto& s : node.statements) {
             if (found) return;
@@ -265,9 +309,9 @@ struct NodeFinder : public ASTVisitor {
     }
 
     void visit(VariableDeclaration& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting variable declaration " << node.name << " at " << node.filename << ":" << node.line << ":"
                                                    << node.column);
-        if (found) return;
         if (node.name_line == line && col >= node.name_col && col < node.name_col + (int)node.name.size()) {
             found = true;
             def_filename = node.filename;
@@ -277,13 +321,23 @@ struct NodeFinder : public ASTVisitor {
             hover_info = "(variable) " + node.type.to_string() + " " + node.name;
             return;
         }
+
+        // Check if cursor is on the type area
+        if (node.line == line && col >= node.column && col < node.name_col) {
+            std::string s_name = find_struct_in_type(node.type);
+            if (!s_name.empty()) {
+                resolve_struct(s_name);
+                if (found) return;
+            }
+        }
+
         if (node.init) node.init->accept(*this);
     }
 
     void visit(FunctionCall& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting function call " << node.name << " at " << node.filename << ":" << node.line << ":"
                                             << node.column);
-        if (found) return;
         if (node.line == line && col >= node.column && col < node.column + (int)node.name.size()) {
             found = true;
             def_filename = node.decl_filename;
@@ -293,7 +347,7 @@ struct NodeFinder : public ASTVisitor {
             std::stringstream ss;
             ss << "(call) ";
             if (node.type) {
-                ss << node.type << " ";
+                ss << *node.type << " ";
             }
             ss << node.name << "(";
             for (size_t i = 0; i < node.param_types.size(); ++i) {
@@ -312,9 +366,9 @@ struct NodeFinder : public ASTVisitor {
     }
 
     void visit(VariableExpression& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting variable expression " << node.name << " at " << node.filename << ":" << node.line << ":"
                                                   << node.column);
-        if (found) return;
         if (node.line == line && col >= node.column && col < node.column + (int)node.name.size()) {
             found = true;
             def_filename = node.decl_filename;
@@ -330,6 +384,7 @@ struct NodeFinder : public ASTVisitor {
     }
 
     void visit(IfStatement& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting if statement at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.condition) node.condition->accept(*this);
         if (found) return;
@@ -339,6 +394,7 @@ struct NodeFinder : public ASTVisitor {
     }
 
     void visit(ForStatement& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting for statement at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.init) node.init->accept(*this);
         if (found) return;
@@ -350,16 +406,19 @@ struct NodeFinder : public ASTVisitor {
     }
 
     void visit(ReturnStatement& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting return statement at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.expr) node.expr->accept(*this);
     }
 
     void visit(ExpressionStatement& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting expression statement at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.expr) node.expr->accept(*this);
     }
 
     void visit(BinaryExpression& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting binary expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.left) node.left->accept(*this);
         if (found) return;
@@ -367,6 +426,7 @@ struct NodeFinder : public ASTVisitor {
     }
 
     void visit(AssignmentExpression& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting assignment expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.lvalue) node.lvalue->accept(*this);
         if (found) return;
@@ -374,35 +434,42 @@ struct NodeFinder : public ASTVisitor {
     }
 
     void visit(IntegerLiteral& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting integer literal at " << node.filename << ":" << node.line << ":" << node.column);
     }
     void visit(StringLiteral& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting string literal at " << node.filename << ":" << node.line << ":" << node.column);
     }
     void visit(YieldStatement& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting yield statement at " << node.filename << ":" << node.line << ":" << node.column);
     }
     void visit(SpawnExpression& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting spawn expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.call) node.call->accept(*this);
     }
     void visit(IncrementExpression& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting increment expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.lvalue) node.lvalue->accept(*this);
     }
     void visit(DecrementExpression& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting decrement expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.lvalue) node.lvalue->accept(*this);
     }
     void visit(AwaitExpression& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting await expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.expr) node.expr->accept(*this);
     }
 
     void visit(Include& node) override {
+        if (found || node.filename != target_filename) return;
         debug_msg("Visiting include " << node.path << " at " << node.filename << ":" << node.line << ":"
                                       << node.column);
-        if (found) return;
         // Check if cursor is on the #include or the path
         // For simplicity, we match the whole line of the include
         if (node.line == line) {
@@ -412,6 +479,79 @@ struct NodeFinder : public ASTVisitor {
             def_col = 1;
             def_size = 0;  // LSP will just open the file at the start
             hover_info = "include \"" + node.path + "\"";
+        }
+    }
+
+    void visit(StructDeclaration& node) override {
+        if (found || node.filename != target_filename) return;
+        if (node.name_line == line && col >= node.name_col && col < node.name_col + (int)node.name.size()) {
+            found = true;
+            def_filename = node.filename;
+            def_line = node.name_line;
+            def_col = node.name_col;
+            def_size = (int)node.name.size();
+            std::stringstream ss;
+            ss << "struct " << node.name << " {\n";
+            for (const auto& m : node.members) {
+                ss << "  " << m.type.to_string() << " " << m.name << ";\n";
+            }
+            ss << "}";
+            hover_info = ss.str();
+        }
+    }
+
+    void visit(MemberAccessExpression& node) override {
+        if (found || node.filename != target_filename) return;
+        node.object->accept(*this);
+        if (found) return;
+
+        // Check if cursor is on the member name
+        int member_start = (int)(node.length - node.member_name.size());
+        if (node.line == line && col >= node.column + member_start && col < node.column + node.length) {
+            found = true;
+            if (node.type) {
+                hover_info = "(member) " + node.type->to_string() + " " + node.member_name;
+            } else {
+                hover_info = "(member) " + node.member_name;
+            }
+
+            // If we have object type, we can jump to member definition
+            if (node.object->type) {
+                std::string s_name = find_struct_in_type(*node.object->type);
+                if (!s_name.empty() && root_program) {
+                    for (const auto& s : root_program->structs) {
+                        if (s->name == s_name) {
+                            for (const auto& m : s->members) {
+                                if (m.name == node.member_name) {
+                                    // Found the member!
+                                    // Wait, Parameter has no pos, but maybe we can guess from struct definition?
+                                    // We'll jump to the struct definition for now as it's better than nothing.
+                                    def_filename = s->filename;
+                                    def_line = s->name_line;
+                                    def_col = s->name_col;
+                                    def_size = (int)s->name.size();
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void visit(SizeofExpression& node) override {
+        if (found || node.filename != target_filename) return;
+        if (node.line == line && col >= node.column && col < node.column + node.length) {
+            std::string s_name = find_struct_in_type(node.target_type);
+            if (!s_name.empty()) {
+                resolve_struct(s_name);
+            }
+            if (!found) {
+                found = true;
+                hover_info = "sizeof(" + node.target_type.to_string() + ")";
+            }
         }
     }
 };
@@ -449,6 +589,8 @@ void LSPServer::on_definition(const std::string& id, const std::string& params) 
     NodeFinder finder;
     finder.line = line;
     finder.col = col;
+    finder.root_program = doc.ast.get();
+    finder.target_filename = uri;
     doc.ast->accept(finder);
 
     if (finder.found) {
@@ -502,6 +644,8 @@ void LSPServer::on_hover(const std::string& id, const std::string& params) {
     NodeFinder finder;
     finder.line = line;
     finder.col = col;
+    finder.root_program = doc.ast.get();
+    finder.target_filename = uri;
     doc.ast->accept(finder);
 
     if (finder.found && !finder.hover_info.empty()) {
@@ -533,19 +677,31 @@ struct SemanticTokensVisitor : public ASTVisitor {
     SemanticTokensVisitor(std::string filename) : target_filename(std::move(filename)) {}
 
     void visit(Program& node) override {
+        for (auto& s : node.structs) s->accept(*this);
         for (auto& g : node.globals) g->accept(*this);
         for (auto& f : node.functions) f->accept(*this);
     }
 
     void visit(Function& node) override {
-        if (node.filename != target_filename) {
-            // Even if it's not our file, we might want to visit its children
-            // if they could somehow be in our file (unlikely in Ether)
-            // but for now, top-level functions from other files should be skipped.
-            return;
+        if (node.filename != target_filename) return;
+
+        // Return type: if struct, highlight as type 3
+        if (node.return_type.kind == DataType::Kind::Struct) {
+            tokens.push_back({node.line, node.column, (int)node.return_type.struct_name.size(), 3});
         }
+
         // Function name: type 0
         tokens.push_back({node.name_line, node.name_col, (int)node.name.size(), 0});
+
+        // Parameters
+        for (const auto& p : node.params) {
+            if (p.type.kind == DataType::Kind::Struct) {
+                tokens.push_back({p.line, p.col, (int)p.type.struct_name.size(), 3});
+            }
+            // Parameter name: type 2
+            tokens.push_back({p.name_line, p.name_col, (int)p.name.size(), 2});
+        }
+
         if (node.body) node.body->accept(*this);
     }
 
@@ -555,6 +711,12 @@ struct SemanticTokensVisitor : public ASTVisitor {
 
     void visit(VariableDeclaration& node) override {
         if (node.filename != target_filename) return;
+
+        // Type: if struct, highlight as type 3
+        if (node.type.kind == DataType::Kind::Struct) {
+            tokens.push_back({node.line, node.column, (int)node.type.struct_name.size(), 3});
+        }
+
         // Variable name: type 1
         tokens.push_back({node.name_line, node.name_col, (int)node.name.size(), 1});
         if (node.init) node.init->accept(*this);
@@ -620,6 +782,33 @@ struct SemanticTokensVisitor : public ASTVisitor {
 
     void visit(AwaitExpression& node) override {
         if (node.expr) node.expr->accept(*this);
+    }
+
+    void visit(StructDeclaration& node) override {
+        if (node.filename != target_filename) return;
+        // Struct name: type 3 (type)
+        tokens.push_back({node.name_line, node.name_col, (int)node.name.size(), 3});
+
+        // Members
+        for (const auto& m : node.members) {
+            if (m.type.kind == DataType::Kind::Struct) {
+                tokens.push_back({m.line, m.col, (int)m.type.struct_name.size(), 3});
+            }
+            // Member name: type 1 (variable/member)
+            tokens.push_back({m.name_line, m.name_col, (int)m.name.size(), 1});
+        }
+    }
+
+    void visit(MemberAccessExpression& node) override {
+        node.object->accept(*this);
+        // Member name: type 1 (variable)
+        int member_start = (int)(node.length - node.member_name.size());
+        tokens.push_back({node.line, node.column + member_start, (int)node.member_name.size(), 1});
+    }
+
+    void visit(SizeofExpression& node) override {
+        // sizeof is a keyword, usually handled by TM, but we can highlight the type inside?
+        // Actually, let's just make sure it doesn't break.
     }
 };
 

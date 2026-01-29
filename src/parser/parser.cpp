@@ -159,13 +159,16 @@ void Parser::parse_top_level(Program &program) {
                     is_variadic = true;
                     break;
                 }
+                const auto &param_start = peek();
                 DataType param_type = parse_type();
                 if (!check(lexer::TokenType::Identifier)) {
                     const auto &token = peek();
                     throw CompilerError("Expected parameter name", m_filename, token.line, token.column,
                                         (int)token.lexeme.size());
                 }
-                params.push_back({param_type, std::string(advance().lexeme)});
+                const auto &param_name_token = advance();
+                params.push_back({param_type, std::string(param_name_token.lexeme), param_start.line,
+                                  param_start.column, param_name_token.line, param_name_token.column});
             } while (match(lexer::TokenType::Comma));
         }
 
@@ -223,13 +226,16 @@ std::unique_ptr<Function> Parser::parse_function() {
                 is_variadic = true;
                 break;
             }
+            const auto &param_start = peek();
             DataType param_type = parse_type();
             if (!check(lexer::TokenType::Identifier)) {
                 const auto &token = peek();
                 throw CompilerError("Expected parameter name", m_filename, token.line, token.column,
                                     (int)token.lexeme.size());
             }
-            params.push_back({param_type, std::string(advance().lexeme)});
+            const auto &param_name_token = advance();
+            params.push_back({param_type, std::string(param_name_token.lexeme), param_start.line, param_start.column,
+                              param_name_token.line, param_name_token.column});
         } while (match(lexer::TokenType::Comma));
     }
 
@@ -384,15 +390,18 @@ std::unique_ptr<StructDeclaration> Parser::parse_struct_declaration() {
 
     std::vector<Parameter> members;
     while (!check(lexer::TokenType::RBrace) && !check(lexer::TokenType::EOF_TOKEN)) {
+        const auto &mem_type_start = peek();
         DataType type = parse_type();
         if (!check(lexer::TokenType::Identifier)) {
             throw CompilerError("Expected member name", m_filename, peek().line, peek().column);
         }
-        std::string mem_name(advance().lexeme);
+        const auto &mem_name_token = advance();
+        std::string mem_name(mem_name_token.lexeme);
         if (!match(lexer::TokenType::Semicolon)) {
             throw CompilerError("Expected ';' after member declaration", m_filename, peek().line, peek().column);
         }
-        members.push_back({type, mem_name});
+        members.push_back(
+            {type, mem_name, mem_type_start.line, mem_type_start.column, mem_name_token.line, mem_name_token.column});
     }
 
     if (!match(lexer::TokenType::RBrace)) {
