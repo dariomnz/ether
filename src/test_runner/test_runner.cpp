@@ -186,45 +186,48 @@ int run_tests(const std::string& ether_bin, const std::string& test_path, const 
     if (num_workers <= 0) num_workers = std::thread::hardware_concurrency();
     if (num_workers <= 0) num_workers = 1;
 
-    std::vector<std::thread> workers;
-    for (int i = 0; i < num_workers; ++i) {
-        workers.emplace_back([&] {
-            while (true) {
-                size_t test_idx;
-                {
-                    std::lock_guard<std::mutex> lock(queue_mutex);
-                    if (test_queue.empty()) return;
-                    test_idx = test_queue.front();
-                    test_queue.pop();
-                }
+    auto worker_task = [&] {
+        while (true) {
+            size_t test_idx;
+            {
+                std::lock_guard<std::mutex> lock(queue_mutex);
+                if (test_queue.empty()) return;
+                test_idx = test_queue.front();
+                test_queue.pop();
+            }
 
-                auto result = perform_test(ether_bin_abs, tests[test_idx]);
+            auto result = perform_test(ether_bin_abs, tests[test_idx]);
 
-                {
-                    std::lock_guard<std::mutex> lock(output_mutex);
-                    if (result.success) {
-                        passed++;
-                        if (!options.quiet) {
-                            std::cout << "Running test: " << result.test_name << "... " << "\033[32mPASSED\033[0m in "
-                                      << std::fixed << std::setprecision(3) << result.elapsed << " seconds"
-                                      << std::endl;
-                        }
-                    } else {
-                        std::cout << "Running test: " << result.test_name << "... " << "\033[31mFAILED\033[0m in "
+            {
+                std::lock_guard<std::mutex> lock(output_mutex);
+                if (result.success) {
+                    passed++;
+                    if (!options.quiet) {
+                        std::cout << "Running test: " << result.test_name << "... " << "\033[32mPASSED\033[0m in "
                                   << std::fixed << std::setprecision(3) << result.elapsed << " seconds" << std::endl;
-                        if (!result.system_error.empty()) {
-                            std::cout << "  - \033[31mERROR:\033[0m " << result.system_error << std::endl;
-                        }
-                        for (const auto& err : result.errors) {
-                            std::cout << "  - " << err << std::endl;
-                        }
+                    }
+                } else {
+                    std::cout << "Running test: " << result.test_name << "... " << "\033[31mFAILED\033[0m in "
+                              << std::fixed << std::setprecision(3) << result.elapsed << " seconds" << std::endl;
+                    if (!result.system_error.empty()) {
+                        std::cout << "  - \033[31mERROR:\033[0m " << result.system_error << std::endl;
+                    }
+                    for (const auto& err : result.errors) {
+                        std::cout << "  - " << err << std::endl;
                     }
                 }
             }
-        });
+        }
+    };
+    if (num_workers == 1) {
+        worker_task();
+    } else {
+        std::vector<std::thread> workers;
+        for (int i = 0; i < num_workers; ++i) {
+            workers.emplace_back(worker_task);
+        }
+        for (auto& w : workers) w.join();
     }
-
-    for (auto& w : workers) w.join();
 
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
