@@ -84,9 +84,17 @@ bool run_test(const std::string& ether_bin, const TestCase& tc) {
             }
         }
 
+        size_t current_search_pos = 0;
         for (const auto& expected_out : tc.expected_outputs) {
-            if (output.find(expected_out) == std::string::npos) {
-                errors.push_back("Expected output substring '" + expected_out + "' not found");
+            size_t pos = output.find(expected_out, current_search_pos);
+            if (pos == std::string::npos) {
+                if (output.find(expected_out) != std::string::npos) {
+                    errors.push_back("Expected output substring '" + expected_out + "' found but out of order");
+                } else {
+                    errors.push_back("Expected output substring '" + expected_out + "' not found");
+                }
+            } else {
+                current_search_pos = pos + expected_out.length();
             }
         }
 
@@ -100,8 +108,8 @@ bool run_test(const std::string& ether_bin, const TestCase& tc) {
         if (errors.empty()) {
             // Remove the line output to the terminal
             std::cout << "\033[32mPASSED\033[0m in " << std::fixed << std::setprecision(3) << elapsed.count()
-                      << " seconds" << std::flush;
-            std::cout << "\r\033[K" << std::flush;
+                      << " seconds\n" << std::flush;
+            // std::cout << "\r\033[K" << std::flush;
             return true;
         } else {
             std::cout << "\033[31mFAILED\033[0m in " << std::fixed << std::setprecision(3) << elapsed.count()
