@@ -311,8 +311,11 @@ struct AwaitExpression : Expression {
 
 struct SizeofExpression : Expression {
     DataType target_type;
-    SizeofExpression(DataType t, std::string fn, int l, int c, int len)
-        : Expression(std::move(fn), l, c, len), target_type(t) {}
+    uint32_t calculated_size = 0;
+    int type_line;
+    int type_col;
+    SizeofExpression(DataType t, int tl, int tc, std::string fn, int l, int c, int len)
+        : Expression(std::move(fn), l, c, len), target_type(t), type_line(tl), type_col(tc) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
     void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };

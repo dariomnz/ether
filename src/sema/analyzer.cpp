@@ -323,6 +323,14 @@ void Analyzer::visit(MemberAccessExpression &node) {
 }
 
 void Analyzer::visit(SizeofExpression &node) {
+    uint32_t slots = 1;
+    if (node.target_type.kind == DataType::Kind::Struct) {
+        auto it = m_structs.find(node.target_type.struct_name);
+        if (it != m_structs.end()) {
+            slots = it->second.total_size;
+        }
+    }
+    node.calculated_size = slots * 16;
     m_current_type = DataType(DataType::Kind::I32);
     node.type = std::make_unique<DataType>(m_current_type);
 }

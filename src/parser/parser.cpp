@@ -550,12 +550,14 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         if (!match(lexer::TokenType::LParent)) {
             throw CompilerError("Expected '(' after 'sizeof'", m_filename, peek().line, peek().column);
         }
+        const auto &type_start = peek();
         DataType type = parse_type();
         if (!match(lexer::TokenType::RParent)) {
             throw CompilerError("Expected ')' after type in 'sizeof'", m_filename, peek().line, peek().column);
         }
         int len = (int)(m_tokens[m_pos - 1].column - token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
-        return std::make_unique<SizeofExpression>(type, m_filename, token.line, token.column, len);
+        return std::make_unique<SizeofExpression>(type, type_start.line, type_start.column, m_filename, token.line,
+                                                  token.column, len);
     }
     if (match(lexer::TokenType::IntegerLiteral)) {
         const auto &tok = m_tokens[m_pos - 1];

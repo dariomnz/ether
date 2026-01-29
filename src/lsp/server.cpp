@@ -548,10 +548,16 @@ struct NodeFinder : public ASTVisitor {
             if (!s_name.empty()) {
                 resolve_struct(s_name);
             }
-            if (!found) {
-                found = true;
-                hover_info = "sizeof(" + node.target_type.to_string() + ")";
+
+            std::string struct_info = hover_info;
+            std::stringstream ss;
+            if (!struct_info.empty()) {
+                ss << struct_info << "\n\n";
             }
+            ss << "// Result: " << node.calculated_size << " bytes\n";
+            ss << "sizeof(" << node.target_type.to_string() << ")";
+            hover_info = ss.str();
+            found = true;
         }
     }
 };
@@ -807,8 +813,10 @@ struct SemanticTokensVisitor : public ASTVisitor {
     }
 
     void visit(SizeofExpression& node) override {
-        // sizeof is a keyword, usually handled by TM, but we can highlight the type inside?
-        // Actually, let's just make sure it doesn't break.
+        if (node.filename != target_filename) return;
+        if (node.target_type.kind == DataType::Kind::Struct) {
+            tokens.push_back({node.type_line, node.type_col, (int)node.target_type.struct_name.size(), 3});
+        }
     }
 };
 
