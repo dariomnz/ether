@@ -3,100 +3,44 @@
 namespace ether::ir {
 
 std::ostream &operator<<(std::ostream &os, OpCode op) {
-    switch (op) {
-        case OpCode::PUSH_I64:
-            os << "PUSH_I64";
-            break;
-        case OpCode::PUSH_I32:
-            os << "PUSH_I32";
-            break;
-        case OpCode::PUSH_I16:
-            os << "PUSH_I16";
-            break;
-        case OpCode::PUSH_I8:
-            os << "PUSH_I8";
-            break;
-        case OpCode::LOAD_VAR:
-            os << "LOAD_VAR";
-            break;
-        case OpCode::STORE_VAR:
-            os << "STORE_VAR";
-            break;
-        case OpCode::ADD:
-            os << "ADD";
-            break;
-        case OpCode::SUB:
-            os << "SUB";
-            break;
-        case OpCode::MUL:
-            os << "MUL";
-            break;
-        case OpCode::DIV:
-            os << "DIV";
-            break;
-        case OpCode::RET:
-            os << "RET";
-            break;
-        case OpCode::HALT:
-            os << "HALT";
-            break;
-        case OpCode::PUSH_STR:
-            os << "PUSH_STR";
-            break;
-        case OpCode::SYSCALL:
-            os << "SYSCALL";
-            break;
-        case OpCode::CALL:
-            os << "CALL";
-            break;
-        case OpCode::JMP:
-            os << "JMP";
-            break;
-        case OpCode::JZ:
-            os << "JZ";
-            break;
-        case OpCode::CMP_EQ:
-            os << "CMP_EQ";
-            break;
-        case OpCode::CMP_LE:
-            os << "CMP_LE";
-            break;
-        case OpCode::CMP_LT:
-            os << "CMP_LT";
-            break;
-        case OpCode::CMP_GT:
-            os << "CMP_GT";
-            break;
-        case OpCode::CMP_GE:
-            os << "CMP_GE";
-            break;
-        case OpCode::SPAWN:
-            os << "SPAWN";
-            break;
-        case OpCode::YIELD:
-            os << "YIELD";
-            break;
-        case OpCode::AWAIT:
-            os << "AWAIT";
-            break;
-        case OpCode::POP:
-            os << "POP";
-            break;
-        case OpCode::PUSH_VARARGS:
-            os << "PUSH_VARARGS";
-            break;
-        case OpCode::LOAD_GLOBAL:
-            os << "LOAD_GLOBAL";
-            break;
-        case OpCode::STORE_GLOBAL:
-            os << "STORE_GLOBAL";
-            break;
-        case OpCode::LOAD_PTR_OFFSET:
-            os << "LOAD_PTR_OFFSET";
-            break;
-        case OpCode::STORE_PTR_OFFSET:
-            os << "STORE_PTR_OFFSET";
-            break;
+    static const std::unordered_map<OpCode, std::string_view> op_to_str = {
+        {OpCode::PUSH_I64, "PUSH_I64"},
+        {OpCode::PUSH_I32, "PUSH_I32"},
+        {OpCode::PUSH_I16, "PUSH_I16"},
+        {OpCode::PUSH_I8, "PUSH_I8"},
+        {OpCode::LOAD_VAR, "LOAD_VAR"},
+        {OpCode::STORE_VAR, "STORE_VAR"},
+        {OpCode::ADD, "ADD"},
+        {OpCode::SUB, "SUB"},
+        {OpCode::MUL, "MUL"},
+        {OpCode::DIV, "DIV"},
+        {OpCode::RET, "RET"},
+        {OpCode::HALT, "HALT"},
+        {OpCode::PUSH_STR, "PUSH_STR"},
+        {OpCode::SYSCALL, "SYSCALL"},
+        {OpCode::CALL, "CALL"},
+        {OpCode::JMP, "JMP"},
+        {OpCode::JZ, "JZ"},
+        {OpCode::CMP_EQ, "CMP_EQ"},
+        {OpCode::CMP_LE, "CMP_LE"},
+        {OpCode::CMP_LT, "CMP_LT"},
+        {OpCode::CMP_GT, "CMP_GT"},
+        {OpCode::CMP_GE, "CMP_GE"},
+        {OpCode::SPAWN, "SPAWN"},
+        {OpCode::YIELD, "YIELD"},
+        {OpCode::AWAIT, "AWAIT"},
+        {OpCode::POP, "POP"},
+        {OpCode::PUSH_VARARGS, "PUSH_VARARGS"},
+        {OpCode::LOAD_GLOBAL, "LOAD_GLOBAL"},
+        {OpCode::STORE_GLOBAL, "STORE_GLOBAL"},
+        {OpCode::LOAD_PTR_OFFSET, "LOAD_PTR_OFFSET"},
+        {OpCode::STORE_PTR_OFFSET, "STORE_PTR_OFFSET"},
+    };
+    auto it = op_to_str.find(op);
+    if (it != op_to_str.end()) {
+        os << it->second;
+    } else {
+        os << "UNKNOWN";
     }
     return os;
 }

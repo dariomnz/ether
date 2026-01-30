@@ -2,7 +2,9 @@
 #define ETHER_AST_HPP
 
 #include <memory>
+#include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ether::parser {
@@ -117,45 +119,33 @@ struct DataType {
     bool is_integer() const { return kind == Kind::I64 || kind == Kind::I32 || kind == Kind::I16 || kind == Kind::I8; }
 
     friend std::ostream& operator<<(std::ostream& os, const DataType& type) {
-        os << type.to_string();
+        static const std::unordered_map<Kind, std::string_view> kind_to_str = {
+            {Kind::I64, "i64"},
+            {Kind::I32, "i32"},
+            {Kind::I16, "i16"},
+            {Kind::I8, "i8"},
+            {Kind::Coroutine, "coroutine"},
+            {Kind::Void, "void"},
+            {Kind::Ptr, "ptr"},
+            {Kind::String, "string"},
+            {Kind::Struct, "struct"},
+        };
+        auto it = kind_to_str.find(type.kind);
+        if (it != kind_to_str.end()) {
+            os << it->second;
+        } else {
+            os << "UNKNOWN";
+        }
+        if (type.inner) {
+            os << "(" << *type.inner << ")";
+        }
         return os;
     }
 
     std::string to_string() const {
-        std::string s;
-        switch (kind) {
-            case Kind::I64:
-                s = "i64";
-                break;
-            case Kind::I32:
-                s = "i32";
-                break;
-            case Kind::I16:
-                s = "i16";
-                break;
-            case Kind::I8:
-                s = "i8";
-                break;
-            case Kind::Coroutine:
-                s = "coroutine";
-                break;
-            case Kind::Void:
-                s = "void";
-                break;
-            case Kind::Ptr:
-                s = "ptr";
-                break;
-            case Kind::String:
-                s = "string";
-                break;
-            case Kind::Struct:
-                s = struct_name;
-                break;
-        }
-        if (inner) {
-            s += "(" + inner->to_string() + ")";
-        }
-        return s;
+        std::stringstream ss;
+        ss << *this;
+        return ss.str();
     }
 };
 
