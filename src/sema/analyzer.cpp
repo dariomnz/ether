@@ -253,6 +253,8 @@ void Analyzer::visit(DecrementExpression &node) {
     node.type = std::make_unique<DataType>(m_current_type);
 }
 
+void Analyzer::visit(Include &node) {}
+
 void Analyzer::push_scope() { m_scopes.emplace_back(); }
 
 void Analyzer::pop_scope() { m_scopes.pop_back(); }

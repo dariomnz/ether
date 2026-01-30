@@ -204,7 +204,7 @@ void LSPServer::on_did_change(const std::string& params) {
     on_did_open(params);
 }
 
-struct NodeFinder : public ASTVisitor {
+struct NodeFinder : public ConstASTVisitor {
     int line;
     int col;
     bool found = false;
@@ -244,7 +244,7 @@ struct NodeFinder : public ASTVisitor {
         }
     }
 
-    void visit(Program& node) override {
+    void visit(const Program& node) override {
         debug_msg("Visiting program " << node.filename);
         for (auto& inc : node.includes) {
             if (found) return;
@@ -264,7 +264,7 @@ struct NodeFinder : public ASTVisitor {
         }
     }
 
-    void visit(Function& node) override {
+    void visit(const Function& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting function " << node.name << " at " << node.filename << ":" << node.line << ":"
                                        << node.column);
@@ -300,7 +300,7 @@ struct NodeFinder : public ASTVisitor {
         if (node.body) node.body->accept(*this);
     }
 
-    void visit(Block& node) override {
+    void visit(const Block& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting block at " << node.filename << ":" << node.line << ":" << node.column);
         for (auto& s : node.statements) {
@@ -309,7 +309,7 @@ struct NodeFinder : public ASTVisitor {
         }
     }
 
-    void visit(VariableDeclaration& node) override {
+    void visit(const VariableDeclaration& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting variable declaration " << node.name << " at " << node.filename << ":" << node.line << ":"
                                                    << node.column);
@@ -335,7 +335,7 @@ struct NodeFinder : public ASTVisitor {
         if (node.init) node.init->accept(*this);
     }
 
-    void visit(FunctionCall& node) override {
+    void visit(const FunctionCall& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting function call " << node.name << " at " << node.filename << ":" << node.line << ":"
                                             << node.column);
@@ -366,7 +366,7 @@ struct NodeFinder : public ASTVisitor {
         }
     }
 
-    void visit(VariableExpression& node) override {
+    void visit(const VariableExpression& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting variable expression " << node.name << " at " << node.filename << ":" << node.line << ":"
                                                   << node.column);
@@ -384,7 +384,7 @@ struct NodeFinder : public ASTVisitor {
         }
     }
 
-    void visit(IfStatement& node) override {
+    void visit(const IfStatement& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting if statement at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.condition) node.condition->accept(*this);
@@ -394,7 +394,7 @@ struct NodeFinder : public ASTVisitor {
         if (node.else_branch) node.else_branch->accept(*this);
     }
 
-    void visit(ForStatement& node) override {
+    void visit(const ForStatement& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting for statement at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.init) node.init->accept(*this);
@@ -406,19 +406,19 @@ struct NodeFinder : public ASTVisitor {
         if (node.body) node.body->accept(*this);
     }
 
-    void visit(ReturnStatement& node) override {
+    void visit(const ReturnStatement& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting return statement at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.expr) node.expr->accept(*this);
     }
 
-    void visit(ExpressionStatement& node) override {
+    void visit(const ExpressionStatement& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting expression statement at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.expr) node.expr->accept(*this);
     }
 
-    void visit(BinaryExpression& node) override {
+    void visit(const BinaryExpression& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting binary expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.left) node.left->accept(*this);
@@ -426,7 +426,7 @@ struct NodeFinder : public ASTVisitor {
         if (node.right) node.right->accept(*this);
     }
 
-    void visit(AssignmentExpression& node) override {
+    void visit(const AssignmentExpression& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting assignment expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.lvalue) node.lvalue->accept(*this);
@@ -434,40 +434,40 @@ struct NodeFinder : public ASTVisitor {
         if (node.value) node.value->accept(*this);
     }
 
-    void visit(IntegerLiteral& node) override {
+    void visit(const IntegerLiteral& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting integer literal at " << node.filename << ":" << node.line << ":" << node.column);
     }
-    void visit(StringLiteral& node) override {
+    void visit(const StringLiteral& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting string literal at " << node.filename << ":" << node.line << ":" << node.column);
     }
-    void visit(YieldStatement& node) override {
+    void visit(const YieldStatement& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting yield statement at " << node.filename << ":" << node.line << ":" << node.column);
     }
-    void visit(SpawnExpression& node) override {
+    void visit(const SpawnExpression& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting spawn expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.call) node.call->accept(*this);
     }
-    void visit(IncrementExpression& node) override {
+    void visit(const IncrementExpression& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting increment expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.lvalue) node.lvalue->accept(*this);
     }
-    void visit(DecrementExpression& node) override {
+    void visit(const DecrementExpression& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting decrement expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.lvalue) node.lvalue->accept(*this);
     }
-    void visit(AwaitExpression& node) override {
+    void visit(const AwaitExpression& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting await expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.expr) node.expr->accept(*this);
     }
 
-    void visit(Include& node) override {
+    void visit(const Include& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting include " << node.path << " at " << node.filename << ":" << node.line << ":"
                                       << node.column);
@@ -483,7 +483,7 @@ struct NodeFinder : public ASTVisitor {
         }
     }
 
-    void visit(StructDeclaration& node) override {
+    void visit(const StructDeclaration& node) override {
         if (found || node.filename != target_filename) return;
         if (node.name_line == line && col >= node.name_col && col < node.name_col + (int)node.name.size()) {
             found = true;
@@ -501,7 +501,7 @@ struct NodeFinder : public ASTVisitor {
         }
     }
 
-    void visit(MemberAccessExpression& node) override {
+    void visit(const MemberAccessExpression& node) override {
         if (found || node.filename != target_filename) return;
         node.object->accept(*this);
         if (found) return;
@@ -542,7 +542,7 @@ struct NodeFinder : public ASTVisitor {
         }
     }
 
-    void visit(SizeofExpression& node) override {
+    void visit(const SizeofExpression& node) override {
         if (found || node.filename != target_filename) return;
         if (node.line == line && col >= node.column && col < node.column + node.length) {
             std::string s_name = find_struct_in_type(node.target_type);
@@ -561,11 +561,15 @@ struct NodeFinder : public ASTVisitor {
             found = true;
         }
     }
-    void visit(IndexExpression& node) override {
+    void visit(const IndexExpression& node) override {
         if (found || node.filename != target_filename) return;
         debug_msg("Visiting index expression at " << node.filename << ":" << node.line << ":" << node.column);
         if (node.object) node.object->accept(*this);
         if (node.index) node.index->accept(*this);
+    }
+
+    void visit(const VarargExpression& node) override {
+        if (found || node.filename != target_filename) return;
     }
 };
 
@@ -683,19 +687,19 @@ struct SemanticToken {
     }
 };
 
-struct SemanticTokensVisitor : public ASTVisitor {
+struct SemanticTokensVisitor : public ConstASTVisitor {
     std::string target_filename;
     std::vector<SemanticToken> tokens;
 
     SemanticTokensVisitor(std::string filename) : target_filename(std::move(filename)) {}
 
-    void visit(Program& node) override {
+    void visit(const Program& node) override {
         for (auto& s : node.structs) s->accept(*this);
         for (auto& g : node.globals) g->accept(*this);
         for (auto& f : node.functions) f->accept(*this);
     }
 
-    void visit(Function& node) override {
+    void visit(const Function& node) override {
         if (node.filename != target_filename) return;
 
         // Return type: if struct, highlight as type 3
@@ -718,11 +722,11 @@ struct SemanticTokensVisitor : public ASTVisitor {
         if (node.body) node.body->accept(*this);
     }
 
-    void visit(Block& node) override {
+    void visit(const Block& node) override {
         for (auto& s : node.statements) s->accept(*this);
     }
 
-    void visit(VariableDeclaration& node) override {
+    void visit(const VariableDeclaration& node) override {
         if (node.filename != target_filename) return;
 
         // Type: if struct, highlight as type 3
@@ -735,69 +739,69 @@ struct SemanticTokensVisitor : public ASTVisitor {
         if (node.init) node.init->accept(*this);
     }
 
-    void visit(VariableExpression& node) override {
+    void visit(const VariableExpression& node) override {
         // Variable reference: type 1
         tokens.push_back({node.line, node.column, (int)node.name.size(), 1});
     }
 
-    void visit(FunctionCall& node) override {
+    void visit(const FunctionCall& node) override {
         // Function call: type 0
         tokens.push_back({node.line, node.column, (int)node.name.size(), 0});
         for (auto& a : node.args) a->accept(*this);
     }
 
-    void visit(IfStatement& node) override {
+    void visit(const IfStatement& node) override {
         if (node.condition) node.condition->accept(*this);
         if (node.then_branch) node.then_branch->accept(*this);
         if (node.else_branch) node.else_branch->accept(*this);
     }
 
-    void visit(ForStatement& node) override {
+    void visit(const ForStatement& node) override {
         if (node.init) node.init->accept(*this);
         if (node.condition) node.condition->accept(*this);
         if (node.increment) node.increment->accept(*this);
         if (node.body) node.body->accept(*this);
     }
 
-    void visit(ReturnStatement& node) override {
+    void visit(const ReturnStatement& node) override {
         if (node.expr) node.expr->accept(*this);
     }
 
-    void visit(ExpressionStatement& node) override {
+    void visit(const ExpressionStatement& node) override {
         if (node.expr) node.expr->accept(*this);
     }
 
-    void visit(BinaryExpression& node) override {
+    void visit(const BinaryExpression& node) override {
         if (node.left) node.left->accept(*this);
         if (node.right) node.right->accept(*this);
     }
 
-    void visit(AssignmentExpression& node) override {
+    void visit(const AssignmentExpression& node) override {
         if (node.lvalue) node.lvalue->accept(*this);
         if (node.value) node.value->accept(*this);
     }
 
-    void visit(IntegerLiteral& node) override {}
-    void visit(StringLiteral& node) override {}
-    void visit(YieldStatement& node) override {}
+    void visit(const IntegerLiteral& node) override {}
+    void visit(const StringLiteral& node) override {}
+    void visit(const YieldStatement& node) override {}
 
-    void visit(SpawnExpression& node) override {
+    void visit(const SpawnExpression& node) override {
         if (node.call) node.call->accept(*this);
     }
 
-    void visit(IncrementExpression& node) override {
+    void visit(const IncrementExpression& node) override {
         if (node.lvalue) node.lvalue->accept(*this);
     }
 
-    void visit(DecrementExpression& node) override {
+    void visit(const DecrementExpression& node) override {
         if (node.lvalue) node.lvalue->accept(*this);
     }
 
-    void visit(AwaitExpression& node) override {
+    void visit(const AwaitExpression& node) override {
         if (node.expr) node.expr->accept(*this);
     }
 
-    void visit(StructDeclaration& node) override {
+    void visit(const StructDeclaration& node) override {
         if (node.filename != target_filename) return;
         // Struct name: type 3 (type)
         tokens.push_back({node.name_line, node.name_col, (int)node.name.size(), 3});
@@ -812,23 +816,30 @@ struct SemanticTokensVisitor : public ASTVisitor {
         }
     }
 
-    void visit(MemberAccessExpression& node) override {
+    void visit(const MemberAccessExpression& node) override {
         node.object->accept(*this);
         // Member name: type 1 (variable)
         int member_start = (int)(node.length - node.member_name.size());
         tokens.push_back({node.line, node.column + member_start, (int)node.member_name.size(), 1});
     }
 
-    void visit(SizeofExpression& node) override {
+    void visit(const SizeofExpression& node) override {
         if (node.filename != target_filename) return;
         if (node.target_type.kind == DataType::Kind::Struct) {
             tokens.push_back({node.type_line, node.type_col, (int)node.target_type.struct_name.size(), 3});
         }
     }
 
-    void visit(IndexExpression& node) override {
+    void visit(const IndexExpression& node) override {
         if (node.object) node.object->accept(*this);
         if (node.index) node.index->accept(*this);
+    }
+
+    void visit(const Include& node) override {
+        if (node.filename != target_filename) return;
+    }
+    void visit(const VarargExpression& node) override {
+        if (node.filename != target_filename) return;
     }
 };
 

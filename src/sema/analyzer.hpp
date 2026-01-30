@@ -37,6 +37,7 @@ class Analyzer : public parser::ASTVisitor {
     void visit(parser::MemberAccessExpression &node) override;
     void visit(parser::IndexExpression &node) override;
     void visit(parser::SizeofExpression &node) override;
+    void visit(parser::Include &node) override;
 
    private:
     struct Symbol {

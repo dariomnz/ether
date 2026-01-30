@@ -17,5 +17,6 @@ for arg in "$@"; do
 done
 
 cmake --build ${build_dir} -j $(nproc) ${FLAGS}
+# cmake --build ${build_dir} ${FLAGS}
 
 ./build/ether --test ./test --quiet

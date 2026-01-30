@@ -433,7 +433,7 @@ std::unique_ptr<Expression> Parser::parse_expression() {
         const auto line = start_token.line;
         const auto col = start_token.column;
 
-        struct CallCheck : ASTVisitor {
+        struct CallCheck : DefaultIgnoreConstASTVisitor {
             bool is_call = false;
             void visit(const FunctionCall &) override { is_call = true; }
         } checker;
