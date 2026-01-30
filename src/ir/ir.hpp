@@ -10,13 +10,18 @@
 
 namespace ether::ir {
 
+constexpr int OpCodeSlotSize = sizeof(uint16_t);
+constexpr int OpCodeAddrSize = sizeof(uint32_t);
+constexpr int OpCodeOffsetSize = sizeof(int32_t);
+constexpr int OpCodeArgCountSize = sizeof(uint8_t);
+
 enum class OpCode : uint8_t {
     PUSH_I64,          // [uint8_t opcode] [int64_t value] (9 bytes)
     PUSH_I32,          // [uint8_t opcode] [int32_t value] (5 bytes)
     PUSH_I16,          // [uint8_t opcode] [int16_t value] (3 bytes)
     PUSH_I8,           // [uint8_t opcode] [int8_t value] (2 bytes)
-    LOAD_VAR,          // [uint8_t opcode] [uint8_t slot] [uint8_t size] (3 bytes)
-    STORE_VAR,         // [uint8_t opcode] [uint8_t slot] [uint8_t size] (3 bytes)
+    LOAD_VAR,          // [uint8_t opcode] [uint16_t slot] [uint8_t size] (3 bytes)
+    STORE_VAR,         // [uint8_t opcode] [uint16_t slot] [uint8_t size] (3 bytes)
     ADD,               // [uint8_t opcode] (1 byte)
     SUB,               // [uint8_t opcode] (1 byte)
     MUL,               // [uint8_t opcode] (1 byte)
@@ -42,7 +47,7 @@ enum class OpCode : uint8_t {
     STORE_GLOBAL,      // [uint8_t opcode] [uint16_t slot] [uint8_t size] (4 bytes)
     LOAD_PTR_OFFSET,   // [uint8_t opcode] [int32_t offset] [uint8_t size] (6 bytes)
     STORE_PTR_OFFSET,  // [uint8_t opcode] [int32_t offset] [uint8_t size] (6 bytes)
-    LEA_STACK,         // [uint8_t opcode] [uint8_t slot] (2 bytes)
+    LEA_STACK,         // [uint8_t opcode] [uint16_t slot] (2 bytes)
     LEA_GLOBAL         // [uint8_t opcode] [uint16_t slot] (5 bytes) -- opcode + 2 bytes slot? 1+2=3 bytes.
 };
 

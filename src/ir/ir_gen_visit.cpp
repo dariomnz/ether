@@ -31,7 +31,7 @@ void IRGenerator::visit(const parser::MemberAccessExpression &node) {
             emit_byte(size);
         } else {
             emit_opcode(ir::OpCode::LOAD_VAR);
-            emit_byte((uint8_t)resolver.slot);
+            emit_uint16(resolver.slot);
             emit_byte(size);
         }
     } else {
@@ -173,7 +173,7 @@ void IRGenerator::visit(const parser::VariableDeclaration &node) {
             emit_byte(s.size);
         } else {
             emit_opcode(ir::OpCode::STORE_VAR);
-            emit_byte((uint8_t)s.slot);
+            emit_uint16(s.slot);
             emit_byte(s.size);
         }
     }
@@ -247,7 +247,7 @@ void IRGenerator::visit(const parser::VariableExpression &node) {
         emit_byte(s.size);
     } else {
         emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_byte((uint8_t)s.slot);
+        emit_uint16(s.slot);
         emit_byte(s.size);
     }
 }
@@ -271,7 +271,7 @@ void IRGenerator::visit(const parser::AssignmentExpression &node) {
             emit_byte(size);
         } else {
             emit_opcode(ir::OpCode::STORE_VAR);
-            emit_byte((uint8_t)resolver.slot);
+            emit_uint16(resolver.slot);
             emit_byte(size);
         }
     } else {
@@ -301,10 +301,10 @@ void IRGenerator::visit(const parser::IncrementExpression &node) {
             emit_byte(1);  // Scalar hardcoded
         } else {
             emit_opcode(ir::OpCode::STORE_VAR);
-            emit_byte((uint8_t)resolver.slot);
+            emit_uint16(resolver.slot);
             emit_byte(1);  // Scalar hardcoded
             emit_opcode(ir::OpCode::LOAD_VAR);
-            emit_byte((uint8_t)resolver.slot);
+            emit_uint16(resolver.slot);
             emit_byte(1);  // Scalar hardcoded
         }
     } else {
@@ -336,10 +336,10 @@ void IRGenerator::visit(const parser::DecrementExpression &node) {
             emit_byte(1);  // Scalar hardcoded
         } else {
             emit_opcode(ir::OpCode::STORE_VAR);
-            emit_byte((uint8_t)resolver.slot);
+            emit_uint16(resolver.slot);
             emit_byte(1);  // Scalar hardcoded
             emit_opcode(ir::OpCode::LOAD_VAR);
-            emit_byte((uint8_t)resolver.slot);
+            emit_uint16(resolver.slot);
             emit_byte(1);  // Scalar hardcoded
         }
     } else {
@@ -438,7 +438,7 @@ void IRGenerator::visit(const parser::FunctionCall &node) {
                     emit_byte(s.size);
                 } else {
                     emit_opcode(ir::OpCode::LOAD_VAR);
-                    emit_byte((uint8_t)s.slot);
+                    emit_uint16(s.slot);
                     emit_byte(s.size);
                 }
             } else {
@@ -448,7 +448,7 @@ void IRGenerator::visit(const parser::FunctionCall &node) {
                     emit_uint16(s.slot);
                 } else {
                     emit_opcode(ir::OpCode::LEA_STACK);
-                    emit_byte((uint8_t)s.slot);
+                    emit_uint16(s.slot);
                 }
             }
             total_slots += 1;  // 'this' pointer is 1 slot

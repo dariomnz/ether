@@ -7,10 +7,10 @@
 // EXPECTED_OUTPUT: LOAD_VAR            slot 0 size 2
 // EXPECTED_OUTPUT: RET                 size 2
 // EXPECTED_OUTPUT: <function: main> (params: 0, slots: 2)
-// EXPECTED_OUTPUT: CALL                addr 28 args 0 <foo>
+// EXPECTED_OUTPUT: CALL                addr 29 args 0 <foo>
 // EXPECTED_OUTPUT: STORE_VAR           slot 0 size 2
 // EXPECTED_OUTPUT: LOAD_VAR            slot 0 size 2
-// EXPECTED_OUTPUT: CALL                addr 49 args 2 <foo2>
+// EXPECTED_OUTPUT: CALL                addr 53 args 2 <foo2>
 #include "std/io.eth"
 
 struct Point {

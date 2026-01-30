@@ -170,7 +170,7 @@ Value VM::run(bool collect_stats) {
                 }
 
                 case ir::OpCode::STORE_VAR: {
-                    uint8_t slot = READ_BYTE();
+                    uint16_t slot = READ_UINT16();
                     uint8_t size = READ_BYTE();
                     auto &stack = CUR_CORO().stack;
                     auto &call_stack = CUR_CORO().call_stack;
@@ -204,7 +204,7 @@ Value VM::run(bool collect_stats) {
                 }
 
                 case ir::OpCode::LOAD_VAR: {
-                    uint8_t slot = READ_BYTE();
+                    uint16_t slot = READ_UINT16();
                     uint8_t size = READ_BYTE();
                     auto &stack = CUR_CORO().stack;
                     auto &call_stack = CUR_CORO().call_stack;
@@ -435,7 +435,7 @@ Value VM::run(bool collect_stats) {
                 }
 
                 case ir::OpCode::LEA_STACK: {
-                    uint8_t slot = READ_BYTE();
+                    uint16_t slot = READ_UINT16();
                     size_t base = CUR_CORO().call_stack.back().stack_base;
                     // Taking address of stack element
                     // WARNING: Unsafe if stack reallocates. We reserve 64k to mitigate.

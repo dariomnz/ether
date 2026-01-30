@@ -101,7 +101,8 @@ void disassemble(const IRProgram &program) {
             }
             case OpCode::STORE_VAR:
             case OpCode::LOAD_VAR: {
-                uint8_t slot = code[ip++];
+                uint16_t slot = *(uint16_t *)&code[ip];
+                ip += 2;
                 uint8_t size = code[ip++];
                 std::cout << "slot " << (int)slot << " size " << (int)size;
                 break;
@@ -115,7 +116,8 @@ void disassemble(const IRProgram &program) {
                 break;
             }
             case OpCode::LEA_STACK: {
-                uint8_t slot = code[ip++];
+                uint16_t slot = *(uint16_t *)&code[ip];
+                ip += 2;
                 std::cout << "slot " << (int)slot;
                 break;
             }

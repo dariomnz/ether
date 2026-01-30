@@ -29,7 +29,7 @@ void IRGenerator::LValueResolver::visit(const parser::MemberAccessExpression &m)
                 gen->emit_byte(1);
             } else {
                 gen->emit_opcode(ir::OpCode::LOAD_VAR);
-                gen->emit_byte((uint8_t)slot);
+                gen->emit_uint16(slot);
                 gen->emit_byte(1);
             }
             kind = Heap;
@@ -61,7 +61,7 @@ void IRGenerator::LValueResolver::visit(const parser::IndexExpression &idx) {
             gen->emit_byte(1);
         } else {
             gen->emit_opcode(ir::OpCode::LOAD_VAR);
-            gen->emit_byte((uint8_t)slot);
+            gen->emit_uint16(slot);
             gen->emit_byte(1);
         }
     } else {
