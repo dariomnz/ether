@@ -30,6 +30,7 @@ class LSPServer {
     void on_definition(const std::string& id, const std::string& params);
     void on_hover(const std::string& id, const std::string& params);
     void on_semantic_tokens(const std::string& id, const std::string& params);
+    void on_completion(const std::string& id, const std::string& params);
     void publish_diagnostics(const std::string& filename, const std::vector<ether::CompilerError>& errors);
 
     struct Document {

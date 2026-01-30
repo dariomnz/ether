@@ -140,6 +140,7 @@ void NodeFinder::visit(const FunctionCall &node) {
         std::stringstream ss;
         ss << "(call) ";
         if (node.type) {
+            found_type = *node.type;
             ss << *node.type << " ";
         }
         ss << node.name << "(";
@@ -170,6 +171,7 @@ void NodeFinder::visit(const VariableExpression &node) {
         def_size = (int)node.name.size();
         if (node.type) {
             hover_info = "(variable) " + node.type->to_string() + " " + node.name;
+            found_type = *node.type;
         } else {
             hover_info = "(variable) " + node.name;
         }
@@ -309,6 +311,7 @@ void NodeFinder::visit(const MemberAccessExpression &node) {
         found = true;
         if (node.type) {
             hover_info = "(member) " + node.type->to_string() + " " + node.member_name;
+            found_type = *node.type;
         } else {
             hover_info = "(member) " + node.member_name;
         }

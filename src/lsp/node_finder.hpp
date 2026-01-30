@@ -15,6 +15,7 @@ struct NodeFinder : public parser::ConstASTVisitor {
     std::string hover_info = "";
     parser::Program *root_program = nullptr;
     std::string target_filename = "";
+    std::optional<parser::DataType> found_type;
 
     std::string find_struct_in_type(const parser::DataType &type);
     void resolve_struct(const std::string &name);

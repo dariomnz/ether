@@ -1,6 +1,7 @@
 #include "server.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -59,6 +60,8 @@ void LSPServer::handle_message(const std::string& message) {
         on_hover(id, message);
     } else if (method == "textDocument/semanticTokens/full") {
         on_semantic_tokens(id, message);
+    } else if (method == "textDocument/completion") {
+        on_completion(id, message);
     }
 }
 
@@ -86,6 +89,9 @@ void LSPServer::on_initialize(const std::string& id, const std::string& params) 
                   "\"tokenModifiers\":[]"
                   "},"
                   "\"full\":true"
+                  "},"
+                  "\"completionProvider\":{"
+                  "\"triggerCharacters\":[\".\"]"
                   "}"
                   "}}");
 }
@@ -298,6 +304,13 @@ void LSPServer::publish_diagnostics(const std::string& filename, const std::vect
 }
 
 void LSPServer::process_file(const std::string& filename, const std::string& source) {
+    // Update source immediately so we have the latest text even if parsing fails
+    if (m_documents.find(filename) == m_documents.end()) {
+        m_documents[filename] = {source, nullptr};
+    } else {
+        m_documents[filename].source = source;
+    }
+
     try {
         std::cerr << "[LSP] Analyzing file: " << filename << std::endl;
         ether::lexer::Lexer lexer(source, filename);
@@ -307,7 +320,7 @@ void LSPServer::process_file(const std::string& filename, const std::string& sou
 
         // Store AST now, so even if sema fails, the LSP has the latest structural info
         auto* ast_ptr = program_ast.get();
-        m_documents[filename] = {source, std::move(program_ast)};
+        m_documents[filename].ast = std::move(program_ast);
 
         std::cerr << "[LSP] Parsed " << ast_ptr->functions.size() << " functions." << std::endl;
         ether::sema::Analyzer analyzer;
@@ -324,6 +337,144 @@ void LSPServer::process_file(const std::string& filename, const std::string& sou
     } catch (...) {
         std::cerr << "[LSP] Unknown error during analysis" << std::endl;
     }
+}
+
+void LSPServer::on_completion(const std::string& id, const std::string& params) {
+    std::string uri = get_json_value(params, "uri");
+    if (uri.starts_with("file://")) uri = uri.substr(7);
+
+    if (m_documents.find(uri) == m_documents.end()) {
+        send_response(id, "{\"isIncomplete\":false,\"items\":[]}");
+        return;
+    }
+
+    auto& doc = m_documents[uri];
+    if (doc.source.empty()) {
+        send_response(id, "{\"isIncomplete\":false,\"items\":[]}");
+        return;
+    }
+
+    std::string line_str = get_json_value(params, "line");
+    std::string char_str = get_json_value(params, "character");
+    int line = std::stoi(line_str);
+    int col = std::stoi(char_str);
+
+    // Extract line content
+    std::stringstream ss(doc.source);
+    std::string content_line;
+    for (int i = 0; i <= line; ++i) {
+        if (!std::getline(ss, content_line)) break;
+    }
+
+    if (content_line.empty() || col > (int)content_line.size()) {
+        send_response(id, "{\"isIncomplete\":false,\"items\":[]}");
+        return;
+    }
+
+    // Check providing loop for '.'
+    if (!content_line.empty() && content_line.back() == '\r') content_line.pop_back();
+
+    // Clamp col just in case
+    if (col > (int)content_line.size()) col = (int)content_line.size();
+
+    int i = col - 1;
+    while (i >= 0 && std::isspace(content_line[i])) i--;
+
+    if (i < 0 || content_line[i] != '.') {
+        send_response(id, "{\"isIncomplete\":false,\"items\":[]}");
+        return;
+    }
+    i--;  // skip dot
+
+    while (i >= 0 && std::isspace(content_line[i])) i--;
+    if (i < 0) {
+        send_response(id, "{\"isIncomplete\":false,\"items\":[]}");
+        return;
+    }
+
+    // Find end of identifier or ')' or ']'
+    int target_col = -1;
+    if (isalnum(content_line[i]) || content_line[i] == '_') {
+        target_col = i + 1;  // 1-based, points to last char of identifier (or within it)
+    } else if (content_line[i] == ')') {
+        int balance = 1;
+        i--;
+        while (i >= 0 && balance > 0) {
+            if (content_line[i] == ')')
+                balance++;
+            else if (content_line[i] == '(')
+                balance--;
+            i--;
+        }
+        if (balance == 0) {
+            while (i >= 0 && std::isspace(content_line[i])) i--;
+            if (i >= 0 && (isalnum(content_line[i]) || content_line[i] == '_')) {
+                target_col = i + 1;
+            }
+        }
+    } else if (content_line[i] == ']') {
+        int balance = 1;
+        i--;
+        while (i >= 0 && balance > 0) {
+            if (content_line[i] == ']')
+                balance++;
+            else if (content_line[i] == '[')
+                balance--;
+            i--;
+        }
+        if (balance == 0) {
+            while (i >= 0 && std::isspace(content_line[i])) i--;
+            if (i >= 0 && (isalnum(content_line[i]) || content_line[i] == '_')) {
+                target_col = i + 1;
+            }
+        }
+    }
+
+    if (target_col == -1) {
+        send_response(id, "{\"isIncomplete\":false,\"items\":[]}");
+        return;
+    }
+
+    // If we have no AST, we can't do anything
+    if (!doc.ast) {
+        send_response(id, "{\"isIncomplete\":false,\"items\":[]}");
+        return;
+    }
+
+    NodeFinder finder;
+    finder.line = line + 1;
+    finder.col = target_col;
+    finder.root_program = doc.ast.get();
+    finder.target_filename = uri;
+    doc.ast->accept(finder);
+
+    if (finder.found && finder.found_type) {
+        std::string s_name = finder.find_struct_in_type(*finder.found_type);
+        if (!s_name.empty()) {
+            // Find struct definition
+            for (const auto& s : doc.ast->structs) {
+                if (s->name == s_name) {
+                    std::stringstream json;
+                    json << "{\"isIncomplete\":false,\"items\":[";
+                    bool first = true;
+                    for (const auto& m : s->members) {
+                        if (!first) json << ",";
+                        json << "{"
+                             << "\"label\":\"" << escape_json(m.name) << "\","
+                             << "\"kind\":5,"  // Field
+                             << "\"detail\":\"" << escape_json(m.type.to_string()) << "\""
+                             << "}";
+                        first = false;
+                    }
+                    json << "]}";
+                    send_response(id, json.str());
+                    return;
+                }
+            }
+        }
+    }
+
+    send_response(id, "{\"isIncomplete\":false,\"items\":[]}");
 }
 
 }  // namespace ether::lsp
