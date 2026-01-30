@@ -598,14 +598,26 @@ std::unique_ptr<Expression> Parser::parse_primary() {
                                                         (int)name.size());
         }
 
-        while (match(lexer::TokenType::Dot)) {
-            if (!check(lexer::TokenType::Identifier)) {
-                throw CompilerError("Expected member name after '.'", m_filename, peek().line, peek().column);
+        while (match(lexer::TokenType::Dot) || check(lexer::TokenType::LBracket)) {
+            if (m_tokens[m_pos - 1].type == lexer::TokenType::Dot) {
+                if (!check(lexer::TokenType::Identifier)) {
+                    throw CompilerError("Expected member name after '.'", m_filename, peek().line, peek().column);
+                }
+                std::string member = std::string(advance().lexeme);
+                int len = (int)(m_tokens[m_pos - 1].column - token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
+                expr = std::make_unique<MemberAccessExpression>(std::move(expr), std::move(member), m_filename,
+                                                                token.line, token.column, len);
+            } else if (match(lexer::TokenType::LBracket)) {
+                auto index = parse_expression();
+                if (!match(lexer::TokenType::RBracket)) {
+                    const auto &err_tok = peek();
+                    throw CompilerError("Expected ']' after index", m_filename, err_tok.line, err_tok.column,
+                                        (int)err_tok.lexeme.size());
+                }
+                int len = (int)(m_tokens[m_pos - 1].column - token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
+                expr = std::make_unique<IndexExpression>(std::move(expr), std::move(index), m_filename, token.line,
+                                                         token.column, len);
             }
-            std::string member = std::string(advance().lexeme);
-            int len = (int)(m_tokens[m_pos - 1].column - token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
-            expr = std::make_unique<MemberAccessExpression>(std::move(expr), std::move(member), m_filename, token.line,
-                                                            token.column, len);
         }
         return expr;
     }

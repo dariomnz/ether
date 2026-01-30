@@ -7,6 +7,7 @@
 #include "common/debug.hpp"
 #include "common/error.hpp"
 #include "lexer/lexer.hpp"
+#include "parser/ast.hpp"
 #include "parser/parser.hpp"
 #include "sema/analyzer.hpp"
 
@@ -560,6 +561,12 @@ struct NodeFinder : public ASTVisitor {
             found = true;
         }
     }
+    void visit(IndexExpression& node) override {
+        if (found || node.filename != target_filename) return;
+        debug_msg("Visiting index expression at " << node.filename << ":" << node.line << ":" << node.column);
+        if (node.object) node.object->accept(*this);
+        if (node.index) node.index->accept(*this);
+    }
 };
 
 void LSPServer::on_definition(const std::string& id, const std::string& params) {
@@ -817,6 +824,11 @@ struct SemanticTokensVisitor : public ASTVisitor {
         if (node.target_type.kind == DataType::Kind::Struct) {
             tokens.push_back({node.type_line, node.type_col, (int)node.target_type.struct_name.size(), 3});
         }
+    }
+
+    void visit(IndexExpression& node) override {
+        if (node.object) node.object->accept(*this);
+        if (node.index) node.index->accept(*this);
     }
 };
 

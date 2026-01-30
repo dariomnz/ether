@@ -412,20 +412,40 @@ Value VM::run(bool collect_stats) {
                 }
 
                 case ir::OpCode::LOAD_PTR_OFFSET: {
-                    uint8_t offset = READ_BYTE();
+                    int32_t offset = READ_I32();
                     Value ptr_val = pop();
-                    if (!ptr_val.as.ptr) throw std::runtime_error("Null pointer dereference");
-                    Value *ptr = (Value *)ptr_val.as.ptr;
+                    void *ptr_addr;
+
+                    // Handle both Ptr and I64 types (for pointer arithmetic)
+                    if (ptr_val.type == ValueType::Ptr) {
+                        ptr_addr = ptr_val.as.ptr;
+                    } else {
+                        // Treat i64 as pointer address
+                        ptr_addr = (void *)(intptr_t)ptr_val.i64_value();
+                    }
+
+                    if (!ptr_addr) throw std::runtime_error("Null pointer dereference");
+                    Value *ptr = (Value *)ptr_addr;
                     push(ptr[offset]);
                     break;
                 }
 
                 case ir::OpCode::STORE_PTR_OFFSET: {
-                    uint8_t offset = READ_BYTE();
+                    int32_t offset = READ_I32();
                     Value ptr_val = pop();
                     Value val = pop();
-                    if (!ptr_val.as.ptr) throw std::runtime_error("Null pointer dereference");
-                    Value *ptr = (Value *)ptr_val.as.ptr;
+                    void *ptr_addr;
+
+                    // Handle both Ptr and I64 types (for pointer arithmetic)
+                    if (ptr_val.type == ValueType::Ptr) {
+                        ptr_addr = ptr_val.as.ptr;
+                    } else {
+                        // Treat i64 as pointer address
+                        ptr_addr = (void *)(intptr_t)ptr_val.i64_value();
+                    }
+
+                    if (!ptr_addr) throw std::runtime_error("Null pointer dereference");
+                    Value *ptr = (Value *)ptr_addr;
                     ptr[offset] = val;
                     break;
                 }

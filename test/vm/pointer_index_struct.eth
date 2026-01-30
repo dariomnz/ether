@@ -1,0 +1,31 @@
+// EXPECTED_OUTPUT: Point 0: (1, 2)
+// EXPECTED_OUTPUT: Point 1: (3, 4)
+// EXPECTED_OUTPUT: Point 2: (5, 6)
+#include "std/io.eth"
+
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+void main() {
+    // Allocate array of structs
+    ptr(Point) points = malloc(3 * sizeof(Point));
+    
+    // Initialize using index operator
+    points[0].x = 1;
+    points[0].y = 2;
+    
+    points[1].x = 3;
+    points[1].y = 4;
+    
+    points[2].x = 5;
+    points[2].y = 6;
+    
+    // Read and print
+    printf("Point 0: (%d, %d)\n", points[0].x, points[0].y);
+    printf("Point 1: (%d, %d)\n", points[1].x, points[1].y);
+    printf("Point 2: (%d, %d)\n", points[2].x, points[2].y);
+    
+    free(points);
+}

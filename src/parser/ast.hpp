@@ -28,6 +28,7 @@ struct Function;
 struct Include;
 struct StructDeclaration;
 struct MemberAccessExpression;
+struct IndexExpression;
 struct SizeofExpression;
 struct Program;
 
@@ -77,6 +78,8 @@ struct ASTVisitor {
     virtual void visit(const StructDeclaration& node) {}
     virtual void visit(MemberAccessExpression& node) { visit(static_cast<const MemberAccessExpression&>(node)); }
     virtual void visit(const MemberAccessExpression& node) {}
+    virtual void visit(IndexExpression& node) { visit(static_cast<const IndexExpression&>(node)); }
+    virtual void visit(const IndexExpression& node) {}
     virtual void visit(SizeofExpression& node) { visit(static_cast<const SizeofExpression&>(node)); }
     virtual void visit(const SizeofExpression& node) {}
     virtual void visit(Program& node) { visit(static_cast<const Program&>(node)); }
@@ -325,6 +328,16 @@ struct MemberAccessExpression : Expression {
     std::string member_name;
     MemberAccessExpression(std::unique_ptr<Expression> obj, std::string mem, std::string fn, int l, int c, int len)
         : Expression(std::move(fn), l, c, len), object(std::move(obj)), member_name(std::move(mem)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
+};
+
+struct IndexExpression : Expression {
+    std::unique_ptr<Expression> object;
+    std::unique_ptr<Expression> index;
+    IndexExpression(std::unique_ptr<Expression> obj, std::unique_ptr<Expression> idx, std::string fn, int l, int c,
+                    int len)
+        : Expression(std::move(fn), l, c, len), object(std::move(obj)), index(std::move(idx)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
     void accept(ASTVisitor& visitor) const override { visitor.visit(*this); }
 };

@@ -341,4 +341,32 @@ void Analyzer::visit(SizeofExpression &node) {
     node.type = std::make_unique<DataType>(m_current_type);
 }
 
+void Analyzer::visit(IndexExpression &node) {
+    node.object->accept(*this);
+    DataType obj_type = m_current_type;
+
+    // Verify that the object is a pointer
+    if (obj_type.kind != DataType::Kind::Ptr) {
+        throw CompilerError("Index operator '[]' requires a pointer, but got " + obj_type.to_string(), node.filename,
+                            node.line, node.column, node.length);
+    }
+
+    // Verify that the index is an integer
+    node.index->accept(*this);
+    DataType index_type = m_current_type;
+    if (!index_type.is_integer()) {
+        throw CompilerError("Index must be an integer type, but got " + index_type.to_string(), node.filename,
+                            node.line, node.column, node.length);
+    }
+
+    // The result type is the inner type of the pointer
+    if (obj_type.inner) {
+        m_current_type = *obj_type.inner;
+    } else {
+        // Fallback to i32 if no inner type specified
+        m_current_type = DataType(DataType::Kind::I32);
+    }
+    node.type = std::make_unique<DataType>(m_current_type);
+}
+
 }  // namespace ether::sema

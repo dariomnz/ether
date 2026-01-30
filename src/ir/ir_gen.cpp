@@ -76,6 +76,10 @@ struct DependencyTracker : public parser::ASTVisitor {
     void visit(const parser::MemberAccessExpression &node) override {
         if (node.object) node.object->accept(*this);
     }
+    void visit(const parser::IndexExpression &node) override {
+        if (node.object) node.object->accept(*this);
+        if (node.index) node.index->accept(*this);
+    }
     void visit(const parser::StructDeclaration &node) override {}
     void visit(const parser::AwaitExpression &node) override {
         if (node.expr) node.expr->accept(*this);
@@ -227,57 +231,7 @@ void IRGenerator::visit(const parser::SizeofExpression &node) {
 }
 
 void IRGenerator::visit(const parser::MemberAccessExpression &node) {
-    struct LValueResolver : parser::ASTVisitor {
-        IRGenerator *gen;
-        enum Kind { Stack, Heap } kind = Stack;
-        uint16_t slot = 0;
-        bool is_global = false;
-        uint8_t offset = 0;
-
-        void visit(const parser::VariableExpression &v) override {
-            auto s = gen->get_var_symbol(v.name);
-            kind = Stack;
-            slot = s.slot;
-            is_global = s.is_global;
-        }
-
-        void visit(const parser::MemberAccessExpression &m) override {
-            m.object->accept(*this);
-            std::string struct_name;
-            bool is_ptr = false;
-            if (m.object->type->kind == parser::DataType::Kind::Ptr) {
-                struct_name = m.object->type->inner->struct_name;
-                is_ptr = true;
-            } else {
-                struct_name = m.object->type->struct_name;
-            }
-            uint8_t m_offset = gen->m_structs.at(struct_name).member_offsets.at(m.member_name);
-
-            if (kind == Stack) {
-                if (is_ptr) {
-                    if (is_global) {
-                        gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
-                        gen->emit_uint16(slot);
-                    } else {
-                        gen->emit_opcode(ir::OpCode::LOAD_VAR);
-                        gen->emit_byte((uint8_t)slot);
-                    }
-                    kind = Heap;
-                    offset = m_offset;
-                } else {
-                    slot += m_offset;
-                }
-            } else {
-                if (is_ptr) {
-                    gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
-                    gen->emit_byte(offset);
-                    offset = m_offset;
-                } else {
-                    offset += m_offset;
-                }
-            }
-        }
-    } resolver;
+    LValueResolver resolver;
     resolver.gen = this;
     node.accept(resolver);
 
@@ -291,8 +245,47 @@ void IRGenerator::visit(const parser::MemberAccessExpression &node) {
         }
     } else {
         emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
-        emit_byte(resolver.offset);
+        emit_int32(resolver.offset);
     }
+}
+
+void IRGenerator::visit(const parser::IndexExpression &node) {
+    // Load the pointer
+    node.object->accept(*this);
+
+    // Load the index
+    node.index->accept(*this);
+
+    // The pointer is now at stack[-2] and index at stack[-1]
+    // We need to compute: ptr + (index * element_size)
+    // For now, we assume element size is 16 bytes (1 slot)
+    // If the inner type is a struct, we need to multiply by its size
+
+    uint16_t element_size = 1;
+    if (node.object->type && node.object->type->kind == parser::DataType::Kind::Ptr && node.object->type->inner) {
+        if (node.object->type->inner->kind == parser::DataType::Kind::Struct) {
+            element_size = m_structs.at(node.object->type->inner->struct_name).total_size;
+        }
+    }
+
+    if (element_size != 1) {
+        // Multiply index by element_size
+        emit_opcode(ir::OpCode::PUSH_I32);
+        emit_int32(element_size);
+        emit_opcode(ir::OpCode::MUL);
+    }
+
+    // Multiply by 16 to convert slot offset to byte offset
+    emit_opcode(ir::OpCode::PUSH_I32);
+    emit_int32(16);  // sizeof(Value)
+    emit_opcode(ir::OpCode::MUL);
+
+    // Add the byte offset to the pointer
+    emit_opcode(ir::OpCode::ADD);
+
+    // Load from the computed address (offset 0)
+    emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
+    emit_int32(0);
 }
 
 void IRGenerator::visit(const parser::Function &func) {
@@ -447,60 +440,97 @@ void IRGenerator::visit(const parser::VariableExpression &node) {
     }
 }
 
+void IRGenerator::LValueResolver::visit(const parser::VariableExpression &v) {
+    auto s = gen->get_var_symbol(v.name);
+    kind = Stack;
+    slot = s.slot;
+    is_global = s.is_global;
+}
+
+void IRGenerator::LValueResolver::visit(const parser::MemberAccessExpression &m) {
+    m.object->accept(*this);
+    std::string struct_name;
+    bool is_ptr = false;
+    if (m.object->type->kind == parser::DataType::Kind::Ptr) {
+        struct_name = m.object->type->inner->struct_name;
+        is_ptr = true;
+    } else {
+        struct_name = m.object->type->struct_name;
+    }
+    uint8_t m_offset = gen->m_structs.at(struct_name).member_offsets.at(m.member_name);
+
+    if (kind == Stack) {
+        if (is_ptr) {
+            if (is_global) {
+                gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
+                gen->emit_uint16(slot);
+            } else {
+                gen->emit_opcode(ir::OpCode::LOAD_VAR);
+                gen->emit_byte((uint8_t)slot);
+            }
+            kind = Heap;
+            offset = m_offset;
+        } else {
+            slot += m_offset;
+        }
+    } else {
+        if (is_ptr) {
+            gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
+            gen->emit_int32(offset);
+            offset = m_offset;
+        } else {
+            offset += m_offset;
+        }
+    }
+}
+
+void IRGenerator::LValueResolver::visit(const parser::IndexExpression &idx) {
+    // Load the pointer
+    idx.object->accept(*this);
+
+    // If we're in Stack mode and have a pointer variable, load it
+    if (kind == Stack) {
+        if (is_global) {
+            gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
+            gen->emit_uint16(slot);
+        } else {
+            gen->emit_opcode(ir::OpCode::LOAD_VAR);
+            gen->emit_byte((uint8_t)slot);
+        }
+    } else {
+        // Already have a pointer on stack from previous operations
+        gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
+        gen->emit_int32(offset);
+    }
+
+    // Now compute the index offset
+    idx.index->accept(*gen);
+
+    // Multiply by element size if needed
+    uint16_t element_size = 1;
+    if (idx.object->type && idx.object->type->kind == parser::DataType::Kind::Ptr && idx.object->type->inner) {
+        if (idx.object->type->inner->kind == parser::DataType::Kind::Struct) {
+            element_size = gen->m_structs.at(idx.object->type->inner->struct_name).total_size;
+        }
+    }
+
+    // Multiply by 16 to convert slot offset to byte offset
+    gen->emit_opcode(ir::OpCode::PUSH_I32);
+    gen->emit_int32(16 * element_size);  // sizeof(Value)
+    gen->emit_opcode(ir::OpCode::MUL);
+
+    // Add to get final address
+    gen->emit_opcode(ir::OpCode::ADD);
+
+    // Now we're in Heap mode with the computed address on stack
+    kind = Heap;
+    offset = 0;
+}
+
 void IRGenerator::visit(const parser::AssignmentExpression &node) {
     node.value->accept(*this);  // Push value to store
 
-    struct LValueResolver : parser::ASTVisitor {
-        IRGenerator *gen;
-        enum Kind { Stack, Heap } kind = Stack;
-        uint16_t slot = 0;
-        bool is_global = false;
-        uint8_t offset = 0;
-
-        void visit(const parser::VariableExpression &v) override {
-            auto s = gen->get_var_symbol(v.name);
-            kind = Stack;
-            slot = s.slot;
-            is_global = s.is_global;
-        }
-
-        void visit(const parser::MemberAccessExpression &m) override {
-            m.object->accept(*this);
-            std::string struct_name;
-            bool is_ptr = false;
-            if (m.object->type->kind == parser::DataType::Kind::Ptr) {
-                struct_name = m.object->type->inner->struct_name;
-                is_ptr = true;
-            } else {
-                struct_name = m.object->type->struct_name;
-            }
-            uint8_t m_offset = gen->m_structs.at(struct_name).member_offsets.at(m.member_name);
-
-            if (kind == Stack) {
-                if (is_ptr) {
-                    if (is_global) {
-                        gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
-                        gen->emit_uint16(slot);
-                    } else {
-                        gen->emit_opcode(ir::OpCode::LOAD_VAR);
-                        gen->emit_byte((uint8_t)slot);
-                    }
-                    kind = Heap;
-                    offset = m_offset;
-                } else {
-                    slot += m_offset;
-                }
-            } else {
-                if (is_ptr) {
-                    gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
-                    gen->emit_byte(offset);
-                    offset = m_offset;
-                } else {
-                    offset += m_offset;
-                }
-            }
-        }
-    } resolver;
+    LValueResolver resolver;
     resolver.gen = this;
     node.lvalue->accept(resolver);
 
@@ -514,7 +544,7 @@ void IRGenerator::visit(const parser::AssignmentExpression &node) {
         }
     } else {
         emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
-        emit_byte(resolver.offset);
+        emit_int32(resolver.offset);
     }
 }
 
@@ -524,57 +554,7 @@ void IRGenerator::visit(const parser::IncrementExpression &node) {
     emit_int32(1);
     emit_opcode(ir::OpCode::ADD);
 
-    struct LValueResolver : parser::ASTVisitor {
-        IRGenerator *gen;
-        enum Kind { Stack, Heap } kind = Stack;
-        uint16_t slot = 0;
-        bool is_global = false;
-        uint8_t offset = 0;
-
-        void visit(const parser::VariableExpression &v) override {
-            auto s = gen->get_var_symbol(v.name);
-            kind = Stack;
-            slot = s.slot;
-            is_global = s.is_global;
-        }
-
-        void visit(const parser::MemberAccessExpression &m) override {
-            m.object->accept(*this);
-            std::string struct_name;
-            bool is_ptr = false;
-            if (m.object->type->kind == parser::DataType::Kind::Ptr) {
-                struct_name = m.object->type->inner->struct_name;
-                is_ptr = true;
-            } else {
-                struct_name = m.object->type->struct_name;
-            }
-            uint8_t m_offset = gen->m_structs.at(struct_name).member_offsets.at(m.member_name);
-
-            if (kind == Stack) {
-                if (is_ptr) {
-                    if (is_global) {
-                        gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
-                        gen->emit_uint16(slot);
-                    } else {
-                        gen->emit_opcode(ir::OpCode::LOAD_VAR);
-                        gen->emit_byte((uint8_t)slot);
-                    }
-                    kind = Heap;
-                    offset = m_offset;
-                } else {
-                    slot += m_offset;
-                }
-            } else {
-                if (is_ptr) {
-                    gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
-                    gen->emit_byte(offset);
-                    offset = m_offset;
-                } else {
-                    offset += m_offset;
-                }
-            }
-        }
-    } resolver;
+    LValueResolver resolver;
     resolver.gen = this;
     node.lvalue->accept(resolver);
 
@@ -592,7 +572,7 @@ void IRGenerator::visit(const parser::IncrementExpression &node) {
         }
     } else {
         emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
-        emit_byte(resolver.offset);
+        emit_int32(resolver.offset);
         // Reload for result
         node.lvalue->accept(*this);
     }
@@ -604,57 +584,7 @@ void IRGenerator::visit(const parser::DecrementExpression &node) {
     emit_int32(1);
     emit_opcode(ir::OpCode::SUB);
 
-    struct LValueResolver : parser::ASTVisitor {
-        IRGenerator *gen;
-        enum Kind { Stack, Heap } kind = Stack;
-        uint16_t slot = 0;
-        bool is_global = false;
-        uint8_t offset = 0;
-
-        void visit(const parser::VariableExpression &v) override {
-            auto s = gen->get_var_symbol(v.name);
-            kind = Stack;
-            slot = s.slot;
-            is_global = s.is_global;
-        }
-
-        void visit(const parser::MemberAccessExpression &m) override {
-            m.object->accept(*this);
-            std::string struct_name;
-            bool is_ptr = false;
-            if (m.object->type->kind == parser::DataType::Kind::Ptr) {
-                struct_name = m.object->type->inner->struct_name;
-                is_ptr = true;
-            } else {
-                struct_name = m.object->type->struct_name;
-            }
-            uint8_t m_offset = gen->m_structs.at(struct_name).member_offsets.at(m.member_name);
-
-            if (kind == Stack) {
-                if (is_ptr) {
-                    if (is_global) {
-                        gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
-                        gen->emit_uint16(slot);
-                    } else {
-                        gen->emit_opcode(ir::OpCode::LOAD_VAR);
-                        gen->emit_byte((uint8_t)slot);
-                    }
-                    kind = Heap;
-                    offset = m_offset;
-                } else {
-                    slot += m_offset;
-                }
-            } else {
-                if (is_ptr) {
-                    gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
-                    gen->emit_byte(offset);
-                    offset = m_offset;
-                } else {
-                    offset += m_offset;
-                }
-            }
-        }
-    } resolver;
+    LValueResolver resolver;
     resolver.gen = this;
     node.lvalue->accept(resolver);
 
@@ -672,7 +602,7 @@ void IRGenerator::visit(const parser::DecrementExpression &node) {
         }
     } else {
         emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
-        emit_byte(resolver.offset);
+        emit_int32(resolver.offset);
         node.lvalue->accept(*this);
     }
 }

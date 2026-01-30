@@ -11,6 +11,18 @@
 namespace ether::ir_gen {
 
 class IRGenerator : public parser::ASTVisitor {
+    struct LValueResolver : parser::ASTVisitor {
+        friend class IRGenerator;
+        IRGenerator *gen;
+        enum Kind { Stack, Heap } kind = Stack;
+        uint16_t slot = 0;
+        bool is_global = false;
+        uint8_t offset = 0;
+        void visit(const parser::VariableExpression &v) override;
+        void visit(const parser::MemberAccessExpression &m) override;
+        void visit(const parser::IndexExpression &idx) override;
+    };
+
    public:
     ir::IRProgram generate(const parser::Program &ast);
 
@@ -36,6 +48,7 @@ class IRGenerator : public parser::ASTVisitor {
     void visit(const parser::StructDeclaration &node) override;
     void visit(const parser::Program &node) override;
     void visit(const parser::MemberAccessExpression &node) override;
+    void visit(const parser::IndexExpression &node) override;
 
    private:
     ir::IRProgram m_program;

@@ -49,6 +49,8 @@ enum class TokenType {
     RParent,
     LBrace,
     RBrace,
+    LBracket,
+    RBracket,
     Semicolon,
     Comma,
     Ellipsis,

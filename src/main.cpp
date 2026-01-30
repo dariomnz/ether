@@ -179,7 +179,8 @@ void disassemble(const ether::ir::IRProgram &program) {
             }
             case ether::ir::OpCode::LOAD_PTR_OFFSET:
             case ether::ir::OpCode::STORE_PTR_OFFSET: {
-                uint8_t offset = code[ip++];
+                uint32_t offset = *(uint32_t *)&code[ip];
+                ip += 4;
                 std::cout << "offset " << (int)offset;
                 break;
             }

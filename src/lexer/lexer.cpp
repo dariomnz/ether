@@ -185,6 +185,10 @@ Token Lexer::next_token() {
             return {TokenType::LBrace, lexeme, start_line, start_col};
         case '}':
             return {TokenType::RBrace, lexeme, start_line, start_col};
+        case '[':
+            return {TokenType::LBracket, lexeme, start_line, start_col};
+        case ']':
+            return {TokenType::RBracket, lexeme, start_line, start_col};
         case '=': {
             if (peek() == '=') {
                 advance();

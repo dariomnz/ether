@@ -1,0 +1,7 @@
+// EXPECTED_OUTPUT: Index operator '[]' requires a pointer
+#include "std/io.eth"
+
+void main() {
+    i32 x = 5;
+    i32 y = x[0];  // Error: x is not a pointer
+}

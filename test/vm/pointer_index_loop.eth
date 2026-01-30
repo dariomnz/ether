@@ -1,0 +1,21 @@
+// EXPECTED_OUTPUT: Sum: 150
+#include "std/io.eth"
+
+void main() {
+    ptr(i32) numbers = malloc(5 * sizeof(i32));
+    
+    // Initialize with a loop
+    for (i32 i = 0; i < 5; i++) {
+        numbers[i] = (i + 1) * 10;
+    }
+    
+    // Calculate sum using index operator
+    i32 sum = 0;
+    for (i32 i = 0; i < 5; i++) {
+        sum = sum + numbers[i];
+    }
+    
+    printf("Sum: %d\n", sum);
+    
+    free(numbers);
+}

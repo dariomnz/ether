@@ -1,0 +1,24 @@
+// EXPECTED_OUTPUT: Before increment: 5
+// EXPECTED_OUTPUT: After increment: 6
+// EXPECTED_OUTPUT: After decrement: 5
+#include "std/io.eth"
+
+void main() {
+    ptr(i32) values = malloc(3 * sizeof(i32));
+    
+    values[0] = 5;
+    values[1] = 10;
+    values[2] = 15;
+    
+    printf("Before increment: %d\n", values[0]);
+    
+    // Test increment operator on indexed element
+    values[0]++;
+    printf("After increment: %d\n", values[0]);
+    
+    // Test decrement operator on indexed element
+    values[0]--;
+    printf("After decrement: %d\n", values[0]);
+    
+    free(values);
+}
