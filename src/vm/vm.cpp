@@ -1,6 +1,9 @@
 #include "vm.hpp"
 
+#include <arpa/inet.h>
 #include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 #include <cstring>
@@ -243,10 +246,8 @@ Value VM::run(bool collect_stats) {
                     // std::endl;
                     auto &coro = CUR_CORO();
                     submit_syscall(coro, num_args_passed);
-                    while (coro.waiting_for_io) {
-                        struct io_uring_cqe *cqe;
-                        io_uring_wait_cqe(&m_ring, &cqe);
-                        handle_io_completion();
+                    if (coro.waiting_for_io) {
+                        yielded = true;
                     }
                     break;
                 }
@@ -577,6 +578,34 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
             return;
         }
 
+        case 13: {  // SOCKET
+            int domain = (int)args[1].i64_value();
+            int type = (int)args[2].i64_value();
+            int protocol = (int)args[3].i64_value();
+            int fd = socket(domain, type, protocol);
+            coro.stack.push_back(Value(fd));
+            return;
+        }
+        case 14: {  // BIND
+            int fd = (int)args[1].i64_value();
+            int port = (int)args[2].i64_value();
+            struct sockaddr_in addr;
+            memset(&addr, 0, sizeof(addr));
+            addr.sin_family = AF_INET;
+            addr.sin_port = htons(port);
+            addr.sin_addr.s_addr = INADDR_ANY;
+            int res = bind(fd, (struct sockaddr *)&addr, sizeof(addr));
+            coro.stack.push_back(Value(res));
+            return;
+        }
+        case 15: {  // LISTEN
+            int fd = (int)args[1].i64_value();
+            int backlog = (int)args[2].i64_value();
+            int res = listen(fd, backlog);
+            coro.stack.push_back(Value(res));
+            return;
+        }
+
         default:
             break;  // Continue to async syscalls
     }
@@ -620,6 +649,42 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
             coro.timeout.tv_sec = ms / 1000;
             coro.timeout.tv_nsec = (ms % 1000) * 1000000;
             io_uring_prep_timeout(sqe, &coro.timeout, 0, 0);
+            break;
+        }
+        case 5: {  // ACCEPT
+            int fd = (int)args[1].i64_value();
+            io_uring_prep_accept(sqe, fd, NULL, NULL, 0);
+            break;
+        }
+        case 6: {  // CONNECT
+            int fd = (int)args[1].i64_value();
+            std::string ip_str(args[2].as_string());
+            int port = (int)args[3].i64_value();
+
+            coro.io_buffer.resize(sizeof(struct sockaddr_in));
+            struct sockaddr_in *addr = (struct sockaddr_in *)coro.io_buffer.data();
+            memset(addr, 0, sizeof(struct sockaddr_in));
+            addr->sin_family = AF_INET;
+            addr->sin_port = htons(port);
+            inet_pton(AF_INET, ip_str.c_str(), &addr->sin_addr);
+
+            io_uring_prep_connect(sqe, fd, (struct sockaddr *)addr, sizeof(struct sockaddr_in));
+            break;
+        }
+        case 7: {  // SEND
+            int fd = (int)args[1].i64_value();
+            const void *buf = (args[2].type == ValueType::String) ? (const void *)args[2].as.str : args[2].as.ptr;
+            int len = (int)args[3].i64_value();
+            int flags = (int)args[4].i64_value();
+            io_uring_prep_send(sqe, fd, buf, len, flags);
+            break;
+        }
+        case 8: {  // RECV
+            int fd = (int)args[1].i64_value();
+            void *buf = args[2].as.ptr;
+            int len = (int)args[3].i64_value();
+            int flags = (int)args[4].i64_value();
+            io_uring_prep_recv(sqe, fd, buf, len, flags);
             break;
         }
         default:

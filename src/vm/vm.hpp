@@ -104,6 +104,7 @@ struct Coroutine {
     std::vector<CallFrame> call_stack;
     size_t ip;
     Value result;
+    std::vector<uint8_t> io_buffer;  // For holding temporary data (like sockaddr) during async I/O
     struct __kernel_timespec timeout;
     bool finished = false;
 

@@ -1,0 +1,54 @@
+#include "std/io.eth"
+
+i32 handle_client(i32 fd) {
+    ptr buf = malloc(1024);
+    printf("Client connected %d\n", fd);
+    i32 running = 1;
+    for (; running == 1;) {
+        i32 n = await co_recv(fd, buf, 1024, 0);
+        printf("Received %d bytes\n", n);
+        if (n <= 0) {
+            running = 0;
+        } else {
+            await co_send(fd, "Pong: ", 6, 0);
+            await co_send(fd, buf, n, 0);
+            printf("Sent %d bytes\n", n);
+        }
+    }
+    
+    free(buf);
+    
+    // shutdown(fd, 2);
+    close(fd);
+    return 0;
+}
+
+i32 main() {
+    i32 server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        printf("Failed to create socket\n");
+        return 1;
+    }
+    
+    // Bind to port 8080
+    if (bind(server_fd, 8080) < 0) {
+        printf("Failed to bind\n");
+        return 1;
+    }
+    
+    if (listen(server_fd, 128) < 0) {
+        printf("Failed to listen\n");
+        return 1;
+    }
+    
+    printf("Server listening on port 8080\n");
+    
+    for (;;) {
+        i32 client_fd = await co_accept(server_fd);
+        if (client_fd >= 0) {
+            spawn handle_client(client_fd);
+        }
+    }
+    
+    return 0;
+}

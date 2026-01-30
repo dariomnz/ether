@@ -5,12 +5,14 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <ranges>
 #include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "common/error.hpp"
+#include "common/iter.hpp"
 #include "ir/ir.hpp"
 #include "ir/ir_gen.hpp"
 #include "lexer/lexer.hpp"
@@ -130,7 +132,7 @@ void disassemble(const ether::ir::IRProgram &program) {
         uint8_t op_byte = code[ip++];
         ether::ir::OpCode op = static_cast<ether::ir::OpCode>(op_byte);
 
-        std::cout << std::right << std::setw(4) << addr << ": " << std::left << std::setw(15) << op;
+        std::cout << std::right << std::setw(4) << addr << ": " << std::left << std::setw(20) << op;
 
         switch (op) {
             case ether::ir::OpCode::PUSH_I64: {
@@ -173,6 +175,12 @@ void disassemble(const ether::ir::IRProgram &program) {
                 uint16_t slot = *(uint16_t *)&code[ip];
                 ip += 2;
                 std::cout << "global_slot " << (int)slot;
+                break;
+            }
+            case ether::ir::OpCode::LOAD_PTR_OFFSET:
+            case ether::ir::OpCode::STORE_PTR_OFFSET: {
+                uint8_t offset = code[ip++];
+                std::cout << "offset " << (int)offset;
                 break;
             }
             case ether::ir::OpCode::SYSCALL: {
@@ -349,10 +357,14 @@ int main(int argc, char *argv[]) {
             std::cout << "Bytecode Size: " << program.bytecode.size() << " bytes" << std::endl;
             std::cout << "String Pool Size: " << program.string_pool.size() << " entries" << std::endl;
             std::cout << "Functions:" << std::endl;
-            for (const auto &[name, info] : program.functions) {
-                std::cout << "  " << name << " @ " << info.entry_addr << " (Params: " << (int)info.num_params
-                          << ", Slots: " << (int)info.num_slots << ")" << std::endl;
-            }
+            for_each_sorted(
+                program.functions,
+                [](const auto &a, const auto &b) { return a.second.entry_addr > b.second.entry_addr; },
+                [&](const auto &pair) {
+                    const auto &[name, info] = pair;
+                    std::cout << "  " << name << " @ " << info.entry_addr << " (Params: " << (int)info.num_params
+                              << ", Slots: " << (int)info.num_slots << ")" << std::endl;
+                });
             disassemble(program);
             return 0;
         }

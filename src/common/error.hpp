@@ -1,5 +1,4 @@
-#ifndef ETHER_ERROR_HPP
-#define ETHER_ERROR_HPP
+#pragma once 
 
 #include <stdexcept>
 #include <string>
@@ -24,5 +23,3 @@ class CompilerError : public std::runtime_error {
 };
 
 }  // namespace ether
-
-#endif  // ETHER_ERROR_HPP
