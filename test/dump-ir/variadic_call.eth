@@ -4,7 +4,7 @@
 // EXPECTED_OUTPUT: PUSH_I32            42
 // EXPECTED_OUTPUT: PUSH_I32            100
 // EXPECTED_OUTPUT: PUSH_VARARGS
-// EXPECTED_OUTPUT: CALL                addr 15 args 4 (variadic) <printf>
+// EXPECTED_OUTPUT: CALL                addr 16 args 4 (variadic) <printf>
 // EXPECTED_OUTPUT: PUSH_I32            0
 // EXPECTED_OUTPUT: RET
 #include "std/io.eth"

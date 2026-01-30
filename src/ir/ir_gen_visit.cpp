@@ -19,17 +19,25 @@ void IRGenerator::visit(const parser::MemberAccessExpression &node) {
     resolver.gen = this;
     node.accept(resolver);
 
+    uint8_t size = 1;
+    if (node.type && node.type->kind == parser::DataType::Kind::Struct) {
+        size = m_structs.at(node.type->struct_name).total_size;
+    }
+
     if (resolver.kind == LValueResolver::Stack) {
         if (resolver.is_global) {
             emit_opcode(ir::OpCode::LOAD_GLOBAL);
             emit_uint16(resolver.slot);
+            emit_byte(size);
         } else {
             emit_opcode(ir::OpCode::LOAD_VAR);
             emit_byte((uint8_t)resolver.slot);
+            emit_byte(size);
         }
     } else {
         emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
         emit_int32(resolver.offset);
+        emit_byte(size);
     }
 }
 
@@ -63,6 +71,13 @@ void IRGenerator::visit(const parser::IndexExpression &node) {
     // Load from the computed address (offset 0)
     emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
     emit_int32(0);
+
+    // Determine the size of the element being loaded
+    uint8_t load_size = 1;
+    if (node.type && node.type->kind == parser::DataType::Kind::Struct) {
+        load_size = m_structs.at(node.type->struct_name).total_size;
+    }
+    emit_byte(load_size);
 }
 
 void IRGenerator::visit(const parser::Function &func) {
@@ -105,9 +120,12 @@ void IRGenerator::visit(const parser::Function &func) {
     };
 
     if (!ends_with_ret(*func.body)) {
+        // Only valid for void functions or implicit int return 0?
+        // Assuming implicit return 0 for now if main, or void.
         emit_opcode(ir::OpCode::PUSH_I32);
         emit_int32(0);
         emit_opcode(ir::OpCode::RET);
+        emit_byte(1);
     }
 
     // Record how many slots this function needs
@@ -123,7 +141,15 @@ void IRGenerator::visit(const parser::Block &block) {
 
 void IRGenerator::visit(const parser::ReturnStatement &node) {
     node.expr->accept(*this);
+    uint8_t size = 1;
+    if (node.expr->type && node.expr->type->kind == parser::DataType::Kind::Struct) {
+        // Ensure struct exists in map
+        if (m_structs.contains(node.expr->type->struct_name)) {
+            size = m_structs.at(node.expr->type->struct_name).total_size;
+        }
+    }
     emit_opcode(ir::OpCode::RET);
+    emit_byte(size);
 }
 
 void IRGenerator::visit(const parser::VariableDeclaration &node) {
@@ -140,9 +166,11 @@ void IRGenerator::visit(const parser::VariableDeclaration &node) {
         if (s.is_global) {
             emit_opcode(ir::OpCode::STORE_GLOBAL);
             emit_uint16(s.slot);
+            emit_byte(s.size);
         } else {
             emit_opcode(ir::OpCode::STORE_VAR);
             emit_byte((uint8_t)s.slot);
+            emit_byte(s.size);
         }
     }
 }
@@ -208,12 +236,15 @@ void IRGenerator::visit(const parser::IntegerLiteral &node) {
 
 void IRGenerator::visit(const parser::VariableExpression &node) {
     Symbol s = get_var_symbol(node.name);
+
     if (s.is_global) {
         emit_opcode(ir::OpCode::LOAD_GLOBAL);
         emit_uint16(s.slot);
+        emit_byte(s.size);
     } else {
         emit_opcode(ir::OpCode::LOAD_VAR);
         emit_byte((uint8_t)s.slot);
+        emit_byte(s.size);
     }
 }
 
@@ -224,17 +255,25 @@ void IRGenerator::visit(const parser::AssignmentExpression &node) {
     resolver.gen = this;
     node.lvalue->accept(resolver);
 
+    uint8_t size = 1;
+    if (node.lvalue && node.lvalue->type && node.lvalue->type->kind == parser::DataType::Kind::Struct) {
+        size = m_structs.at(node.lvalue->type->struct_name).total_size;
+    }
+
     if (resolver.kind == LValueResolver::Stack) {
         if (resolver.is_global) {
             emit_opcode(ir::OpCode::STORE_GLOBAL);
             emit_uint16(resolver.slot);
+            emit_byte(size);
         } else {
             emit_opcode(ir::OpCode::STORE_VAR);
             emit_byte((uint8_t)resolver.slot);
+            emit_byte(size);
         }
     } else {
         emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
         emit_int32(resolver.offset);
+        emit_byte(size);
     }
 }
 
@@ -252,17 +291,22 @@ void IRGenerator::visit(const parser::IncrementExpression &node) {
         if (resolver.is_global) {
             emit_opcode(ir::OpCode::STORE_GLOBAL);
             emit_uint16(resolver.slot);
+            emit_byte(1);  // Scalar hardcoded
             emit_opcode(ir::OpCode::LOAD_GLOBAL);
             emit_uint16(resolver.slot);
+            emit_byte(1);  // Scalar hardcoded
         } else {
             emit_opcode(ir::OpCode::STORE_VAR);
             emit_byte((uint8_t)resolver.slot);
+            emit_byte(1);  // Scalar hardcoded
             emit_opcode(ir::OpCode::LOAD_VAR);
             emit_byte((uint8_t)resolver.slot);
+            emit_byte(1);  // Scalar hardcoded
         }
     } else {
         emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
         emit_int32(resolver.offset);
+        emit_byte(1);  // Scalar hardcoded
         // Reload for result
         node.lvalue->accept(*this);
     }
@@ -282,17 +326,22 @@ void IRGenerator::visit(const parser::DecrementExpression &node) {
         if (resolver.is_global) {
             emit_opcode(ir::OpCode::STORE_GLOBAL);
             emit_uint16(resolver.slot);
+            emit_byte(1);  // Scalar hardcoded
             emit_opcode(ir::OpCode::LOAD_GLOBAL);
             emit_uint16(resolver.slot);
+            emit_byte(1);  // Scalar hardcoded
         } else {
             emit_opcode(ir::OpCode::STORE_VAR);
             emit_byte((uint8_t)resolver.slot);
+            emit_byte(1);  // Scalar hardcoded
             emit_opcode(ir::OpCode::LOAD_VAR);
             emit_byte((uint8_t)resolver.slot);
+            emit_byte(1);  // Scalar hardcoded
         }
     } else {
         emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
         emit_int32(resolver.offset);
+        emit_byte(1);  // Scalar hardcoded
         node.lvalue->accept(*this);
     }
 }
@@ -363,10 +412,20 @@ void IRGenerator::visit(const parser::StringLiteral &node) {
 }
 
 void IRGenerator::visit(const parser::FunctionCall &node) {
+    uint8_t total_slots = 0;
     for (const auto &arg : node.args) {
         arg->accept(*this);
+        // Calculate size of argument
+        uint8_t size = 1;
+        if (arg->type && arg->type->kind == parser::DataType::Kind::Struct) {
+            size = m_structs.at(arg->type->struct_name).total_size;
+        }
+        total_slots += size;
     }
-    uint8_t num_args = (uint8_t)node.args.size();
+
+    // We pass total_slots as the number of args passed
+    uint8_t num_args = total_slots;
+
     if (!node.args.empty() && dynamic_cast<const parser::VarargExpression *>(node.args.back().get())) {
         num_args |= 0x80;
     }

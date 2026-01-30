@@ -58,6 +58,7 @@ class IRGenerator : public parser::ConstASTVisitor {
     // Tracking for bytecode generation
     struct Symbol {
         uint16_t slot;
+        uint8_t size = 1;
         bool is_global = false;
     };
     struct Scope {

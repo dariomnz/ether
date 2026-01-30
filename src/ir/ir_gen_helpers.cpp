@@ -57,7 +57,7 @@ void IRGenerator::define_var(const std::string &name, uint16_t size) {
     auto &scope = m_scopes.back();
     uint16_t slot = scope.next_slot;
     scope.next_slot += size;
-    scope.variables[name] = {slot, scope.is_global};
+    scope.variables[name] = {slot, (uint8_t)size, scope.is_global};
 }
 
 IRGenerator::JumpPlaceholder IRGenerator::emit_jump(ir::OpCode op) {

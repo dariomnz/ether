@@ -81,6 +81,7 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
             Symbol s = get_var_symbol(global->name);
             emit_opcode(ir::OpCode::STORE_GLOBAL);
             emit_uint16(s.slot);
+            emit_byte(1);
         }
     }
 

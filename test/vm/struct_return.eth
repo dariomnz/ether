@@ -1,0 +1,17 @@
+// EXPECTED_RESULT: 70
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+Point foo() {
+    Point p;
+    p.x = 30;
+    p.y = 40;
+    return p;
+}
+
+i32 main() {
+    Point p = foo();
+    return p.x + p.y;
+}

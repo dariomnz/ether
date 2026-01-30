@@ -26,9 +26,11 @@ void IRGenerator::LValueResolver::visit(const parser::MemberAccessExpression &m)
             if (is_global) {
                 gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
                 gen->emit_uint16(slot);
+                gen->emit_byte(1);
             } else {
                 gen->emit_opcode(ir::OpCode::LOAD_VAR);
                 gen->emit_byte((uint8_t)slot);
+                gen->emit_byte(1);
             }
             kind = Heap;
             offset = m_offset;
@@ -39,6 +41,7 @@ void IRGenerator::LValueResolver::visit(const parser::MemberAccessExpression &m)
         if (is_ptr) {
             gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
             gen->emit_int32(offset);
+            gen->emit_byte(1);
             offset = m_offset;
         } else {
             offset += m_offset;
@@ -55,14 +58,17 @@ void IRGenerator::LValueResolver::visit(const parser::IndexExpression &idx) {
         if (is_global) {
             gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
             gen->emit_uint16(slot);
+            gen->emit_byte(1);
         } else {
             gen->emit_opcode(ir::OpCode::LOAD_VAR);
             gen->emit_byte((uint8_t)slot);
+            gen->emit_byte(1);
         }
     } else {
         // Already have a pointer on stack from previous operations
         gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
         gen->emit_int32(offset);
+        gen->emit_byte(1);
     }
 
     // Now compute the index offset

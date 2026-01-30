@@ -102,21 +102,24 @@ void disassemble(const IRProgram &program) {
             case OpCode::STORE_VAR:
             case OpCode::LOAD_VAR: {
                 uint8_t slot = code[ip++];
-                std::cout << "slot " << (int)slot;
+                uint8_t size = code[ip++];
+                std::cout << "slot " << (int)slot << " size " << (int)size;
                 break;
             }
             case OpCode::STORE_GLOBAL:
             case OpCode::LOAD_GLOBAL: {
                 uint16_t slot = *(uint16_t *)&code[ip];
                 ip += 2;
-                std::cout << "global_slot " << (int)slot;
+                uint8_t size = code[ip++];
+                std::cout << "global_slot " << (int)slot << " size " << (int)size;
                 break;
             }
             case OpCode::LOAD_PTR_OFFSET:
             case OpCode::STORE_PTR_OFFSET: {
                 uint32_t offset = *(uint32_t *)&code[ip];
                 ip += 4;
-                std::cout << "offset " << (int)offset;
+                uint8_t size = code[ip++];
+                std::cout << "offset " << (int)offset << " size " << (int)size;
                 break;
             }
             case OpCode::SYSCALL: {
@@ -127,6 +130,11 @@ void disassemble(const IRProgram &program) {
                 } else {
                     std::cout << (int)num_args;
                 }
+                break;
+            }
+            case OpCode::RET: {
+                uint8_t size = code[ip++];
+                std::cout << "size " << (int)size;
                 break;
             }
             case OpCode::CALL:
