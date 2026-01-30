@@ -82,23 +82,20 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
         if (m_reachable.contains(global->name) && global->init) {
             global->init->accept(*this);
             Symbol s = get_var_symbol(global->name);
-            emit_opcode(ir::OpCode::STORE_GLOBAL);
-            emit_uint16(s.slot);
-            emit_byte(1);
+            emit_store_global(s.slot, 1);
         }
     }
 
     // Call main and halt
-    emit_opcode(ir::OpCode::CALL);
-    m_call_patches.push_back({m_program.bytecode.size(), "main"});
-    emit_uint32(0);
-    emit_byte(0);  // main takes 0 args
-    emit_opcode(ir::OpCode::HALT);
+    size_t patch_pos = m_program.bytecode.size() + 1;
+    m_call_patches.push_back({patch_pos, "main"});
+    emit_call(0, 0);
+    emit_halt();
 
     // 5. Generate functions
     ast.accept(*this);
 
-    emit_opcode(ir::OpCode::HALT);
+    emit_halt();
 
     for (const auto &patch : m_call_patches) {
         uint32_t addr = (uint32_t)m_program.functions.at(patch.func_name).entry_addr;

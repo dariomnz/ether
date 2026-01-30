@@ -24,13 +24,9 @@ void IRGenerator::LValueResolver::visit(const parser::MemberAccessExpression &m)
     if (kind == Stack) {
         if (is_ptr) {
             if (is_global) {
-                gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
-                gen->emit_uint16(slot);
-                gen->emit_byte(1);
+                gen->emit_load_global(slot, 1);
             } else {
-                gen->emit_opcode(ir::OpCode::LOAD_VAR);
-                gen->emit_uint16(slot);
-                gen->emit_byte(1);
+                gen->emit_load_var(slot, 1);
             }
             kind = Heap;
             offset = m_offset;
@@ -39,9 +35,7 @@ void IRGenerator::LValueResolver::visit(const parser::MemberAccessExpression &m)
         }
     } else {
         if (is_ptr) {
-            gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
-            gen->emit_int32(offset);
-            gen->emit_byte(1);
+            gen->emit_load_ptr_offset(offset, 1);
             offset = m_offset;
         } else {
             offset += m_offset;
@@ -56,19 +50,13 @@ void IRGenerator::LValueResolver::visit(const parser::IndexExpression &idx) {
     // If we're in Stack mode and have a pointer variable, load it
     if (kind == Stack) {
         if (is_global) {
-            gen->emit_opcode(ir::OpCode::LOAD_GLOBAL);
-            gen->emit_uint16(slot);
-            gen->emit_byte(1);
+            gen->emit_load_global(slot, 1);
         } else {
-            gen->emit_opcode(ir::OpCode::LOAD_VAR);
-            gen->emit_uint16(slot);
-            gen->emit_byte(1);
+            gen->emit_load_var(slot, 1);
         }
     } else {
         // Already have a pointer on stack from previous operations
-        gen->emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
-        gen->emit_int32(offset);
-        gen->emit_byte(1);
+        gen->emit_load_ptr_offset(offset, 1);
     }
 
     // Now compute the index offset
@@ -83,12 +71,12 @@ void IRGenerator::LValueResolver::visit(const parser::IndexExpression &idx) {
     }
 
     // Multiply by 16 to convert slot offset to byte offset
-    gen->emit_opcode(ir::OpCode::PUSH_I32);
-    gen->emit_int32(16 * element_size);  // sizeof(Value)
-    gen->emit_opcode(ir::OpCode::MUL);
+    // Multiply by 16 to convert slot offset to byte offset
+    gen->emit_push_i32(16 * element_size);  // sizeof(Value)
+    gen->emit_mul();
 
     // Add to get final address
-    gen->emit_opcode(ir::OpCode::ADD);
+    gen->emit_add();
 
     // Now we're in Heap mode with the computed address on stack
     kind = Heap;

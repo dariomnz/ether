@@ -9,10 +9,7 @@ void IRGenerator::visit(const parser::StructDeclaration &node) {
 }
 void IRGenerator::visit(const parser::Include &node) {}
 
-void IRGenerator::visit(const parser::SizeofExpression &node) {
-    emit_opcode(ir::OpCode::PUSH_I32);
-    emit_int32(get_type_size(node.target_type));
-}
+void IRGenerator::visit(const parser::SizeofExpression &node) { emit_push_i32(get_type_size(node.target_type)); }
 
 void IRGenerator::visit(const parser::MemberAccessExpression &node) {
     LValueResolver resolver;
@@ -26,18 +23,12 @@ void IRGenerator::visit(const parser::MemberAccessExpression &node) {
 
     if (resolver.kind == LValueResolver::Stack) {
         if (resolver.is_global) {
-            emit_opcode(ir::OpCode::LOAD_GLOBAL);
-            emit_uint16(resolver.slot);
-            emit_byte(size);
+            emit_load_global(resolver.slot, size);
         } else {
-            emit_opcode(ir::OpCode::LOAD_VAR);
-            emit_uint16(resolver.slot);
-            emit_byte(size);
+            emit_load_var(resolver.slot, size);
         }
     } else {
-        emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
-        emit_int32(resolver.offset);
-        emit_byte(size);
+        emit_load_ptr_offset(resolver.offset, size);
     }
 }
 
@@ -61,23 +52,21 @@ void IRGenerator::visit(const parser::IndexExpression &node) {
     }
 
     // Multiply by 16 to convert slot offset to byte offset
-    emit_opcode(ir::OpCode::PUSH_I32);
-    emit_int32(16 * element_size);  // sizeof(Value)
-    emit_opcode(ir::OpCode::MUL);
+    emit_push_i32(16 * element_size);  // sizeof(Value)
+    emit_mul();
 
     // Add the byte offset to the pointer
-    emit_opcode(ir::OpCode::ADD);
-
-    // Load from the computed address (offset 0)
-    emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
-    emit_int32(0);
+    // Add the byte offset to the pointer
+    emit_add();
 
     // Determine the size of the element being loaded
     uint8_t load_size = 1;
     if (node.type && node.type->kind == parser::DataType::Kind::Struct) {
         load_size = m_structs.at(node.type->struct_name).total_size;
     }
-    emit_byte(load_size);
+
+    // Load from the computed address (offset 0)
+    emit_load_ptr_offset(0, load_size);
 }
 
 void IRGenerator::visit(const parser::Function &func) {
@@ -122,10 +111,8 @@ void IRGenerator::visit(const parser::Function &func) {
     if (!ends_with_ret(*func.body)) {
         // Only valid for void functions or implicit int return 0?
         // Assuming implicit return 0 for now if main, or void.
-        emit_opcode(ir::OpCode::PUSH_I32);
-        emit_int32(0);
-        emit_opcode(ir::OpCode::RET);
-        emit_byte(1);
+        emit_push_i32(0);
+        emit_ret(1);
     }
 
     // Record how many slots this function needs
@@ -152,8 +139,7 @@ void IRGenerator::visit(const parser::ReturnStatement &node) {
             size = m_structs.at(node.expr->type->struct_name).total_size;
         }
     }
-    emit_opcode(ir::OpCode::RET);
-    emit_byte(size);
+    emit_ret(size);
 }
 
 void IRGenerator::visit(const parser::VariableDeclaration &node) {
@@ -168,13 +154,9 @@ void IRGenerator::visit(const parser::VariableDeclaration &node) {
     if (node.init) {
         Symbol s = get_var_symbol(node.name);
         if (s.is_global) {
-            emit_opcode(ir::OpCode::STORE_GLOBAL);
-            emit_uint16(s.slot);
-            emit_byte(s.size);
+            emit_store_global(s.slot, s.size);
         } else {
-            emit_opcode(ir::OpCode::STORE_VAR);
-            emit_uint16(s.slot);
-            emit_byte(s.size);
+            emit_store_var(s.slot, s.size);
         }
     }
 }
@@ -212,29 +194,24 @@ void IRGenerator::visit(const parser::ForStatement &node) {
         node.increment->accept(*this);
     }
 
-    emit_opcode(ir::OpCode::JMP);
-    emit_uint32((uint32_t)start_label);
+    emit_jump(ir::OpCode::JMP, (uint32_t)start_label);
 
     if (node.condition) {
         patch_jump(jump_to_exit, m_program.bytecode.size());
     }
 }
 
-void IRGenerator::visit(const parser::YieldStatement &node) { emit_opcode(ir::OpCode::YIELD); }
+void IRGenerator::visit(const parser::YieldStatement &node) { emit_yield(); }
 
 void IRGenerator::visit(const parser::IntegerLiteral &node) {
     if (node.type && node.type->kind == parser::DataType::Kind::I64) {
-        emit_opcode(ir::OpCode::PUSH_I64);
-        emit_int64(node.value);
+        emit_push_i64(node.value);
     } else if (node.type && node.type->kind == parser::DataType::Kind::I16) {
-        emit_opcode(ir::OpCode::PUSH_I16);
-        emit_int16((int16_t)node.value);
+        emit_push_i16((int16_t)node.value);
     } else if (node.type && node.type->kind == parser::DataType::Kind::I8) {
-        emit_opcode(ir::OpCode::PUSH_I8);
-        emit_int8((int8_t)node.value);
+        emit_push_i8((int8_t)node.value);
     } else {
-        emit_opcode(ir::OpCode::PUSH_I32);
-        emit_int32((int32_t)node.value);
+        emit_push_i32((int32_t)node.value);
     }
 }
 
@@ -242,13 +219,9 @@ void IRGenerator::visit(const parser::VariableExpression &node) {
     Symbol s = get_var_symbol(node.name);
 
     if (s.is_global) {
-        emit_opcode(ir::OpCode::LOAD_GLOBAL);
-        emit_uint16(s.slot);
-        emit_byte(s.size);
+        emit_load_global(s.slot, s.size);
     } else {
-        emit_opcode(ir::OpCode::LOAD_VAR);
-        emit_uint16(s.slot);
-        emit_byte(s.size);
+        emit_load_var(s.slot, s.size);
     }
 }
 
@@ -266,26 +239,19 @@ void IRGenerator::visit(const parser::AssignmentExpression &node) {
 
     if (resolver.kind == LValueResolver::Stack) {
         if (resolver.is_global) {
-            emit_opcode(ir::OpCode::STORE_GLOBAL);
-            emit_uint16(resolver.slot);
-            emit_byte(size);
+            emit_store_global(resolver.slot, size);
         } else {
-            emit_opcode(ir::OpCode::STORE_VAR);
-            emit_uint16(resolver.slot);
-            emit_byte(size);
+            emit_store_var(resolver.slot, size);
         }
     } else {
-        emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
-        emit_int32(resolver.offset);
-        emit_byte(size);
+        emit_store_ptr_offset(resolver.offset, size);
     }
 }
 
 void IRGenerator::visit(const parser::IncrementExpression &node) {
     node.lvalue->accept(*this);  // Push current value
-    emit_opcode(ir::OpCode::PUSH_I32);
-    emit_int32(1);
-    emit_opcode(ir::OpCode::ADD);
+    emit_push_i32(1);
+    emit_add();
 
     LValueResolver resolver;
     resolver.gen = this;
@@ -293,24 +259,14 @@ void IRGenerator::visit(const parser::IncrementExpression &node) {
 
     if (resolver.kind == LValueResolver::Stack) {
         if (resolver.is_global) {
-            emit_opcode(ir::OpCode::STORE_GLOBAL);
-            emit_uint16(resolver.slot);
-            emit_byte(1);  // Scalar hardcoded
-            emit_opcode(ir::OpCode::LOAD_GLOBAL);
-            emit_uint16(resolver.slot);
-            emit_byte(1);  // Scalar hardcoded
+            emit_store_global(resolver.slot, 1);
+            emit_load_global(resolver.slot, 1);
         } else {
-            emit_opcode(ir::OpCode::STORE_VAR);
-            emit_uint16(resolver.slot);
-            emit_byte(1);  // Scalar hardcoded
-            emit_opcode(ir::OpCode::LOAD_VAR);
-            emit_uint16(resolver.slot);
-            emit_byte(1);  // Scalar hardcoded
+            emit_store_var(resolver.slot, 1);
+            emit_load_var(resolver.slot, 1);
         }
     } else {
-        emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
-        emit_int32(resolver.offset);
-        emit_byte(1);  // Scalar hardcoded
+        emit_store_ptr_offset(resolver.offset, 1);
         // Reload for result
         node.lvalue->accept(*this);
     }
@@ -318,9 +274,8 @@ void IRGenerator::visit(const parser::IncrementExpression &node) {
 
 void IRGenerator::visit(const parser::DecrementExpression &node) {
     node.lvalue->accept(*this);
-    emit_opcode(ir::OpCode::PUSH_I32);
-    emit_int32(1);
-    emit_opcode(ir::OpCode::SUB);
+    emit_push_i32(1);
+    emit_sub();
 
     LValueResolver resolver;
     resolver.gen = this;
@@ -328,31 +283,21 @@ void IRGenerator::visit(const parser::DecrementExpression &node) {
 
     if (resolver.kind == LValueResolver::Stack) {
         if (resolver.is_global) {
-            emit_opcode(ir::OpCode::STORE_GLOBAL);
-            emit_uint16(resolver.slot);
-            emit_byte(1);  // Scalar hardcoded
-            emit_opcode(ir::OpCode::LOAD_GLOBAL);
-            emit_uint16(resolver.slot);
-            emit_byte(1);  // Scalar hardcoded
+            emit_store_global(resolver.slot, 1);
+            emit_load_global(resolver.slot, 1);
         } else {
-            emit_opcode(ir::OpCode::STORE_VAR);
-            emit_uint16(resolver.slot);
-            emit_byte(1);  // Scalar hardcoded
-            emit_opcode(ir::OpCode::LOAD_VAR);
-            emit_uint16(resolver.slot);
-            emit_byte(1);  // Scalar hardcoded
+            emit_store_var(resolver.slot, 1);
+            emit_load_var(resolver.slot, 1);
         }
     } else {
-        emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
-        emit_int32(resolver.offset);
-        emit_byte(1);  // Scalar hardcoded
+        emit_store_ptr_offset(resolver.offset, 1);
         node.lvalue->accept(*this);
     }
 }
 
 void IRGenerator::visit(const parser::AwaitExpression &node) {
     node.expr->accept(*this);
-    emit_opcode(ir::OpCode::AWAIT);
+    emit_await();
 }
 
 void IRGenerator::visit(const parser::SpawnExpression &node) {
@@ -360,18 +305,19 @@ void IRGenerator::visit(const parser::SpawnExpression &node) {
     for (const auto &arg : node.call->args) {
         arg->accept(*this);
     }
-    emit_opcode(ir::OpCode::SPAWN);
-    if (node.call->name == "syscall") {
-        emit_uint32(0xFFFFFFFF);
-    } else {
-        m_call_patches.push_back({m_program.bytecode.size(), node.call->name});
-        emit_uint32(0);
-    }
+
     uint8_t num_args = (uint8_t)node.call->args.size();
     if (!node.call->args.empty() && dynamic_cast<const parser::VarargExpression *>(node.call->args.back().get())) {
         num_args |= 0x80;
     }
-    emit_byte(num_args);
+
+    if (node.call->name == "syscall") {
+        emit_spawn(0xFFFFFFFF, num_args);
+    } else {
+        size_t patch_pos = m_program.bytecode.size() + 1;
+        m_call_patches.push_back({patch_pos, node.call->name});
+        emit_spawn(0, num_args);
+    }
 }
 
 void IRGenerator::visit(const parser::BinaryExpression &node) {
@@ -379,41 +325,38 @@ void IRGenerator::visit(const parser::BinaryExpression &node) {
     node.right->accept(*this);
     switch (node.op) {
         case parser::BinaryExpression::Op::Add:
-            emit_opcode(ir::OpCode::ADD);
+            emit_add();
             break;
         case parser::BinaryExpression::Op::Sub:
-            emit_opcode(ir::OpCode::SUB);
+            emit_sub();
             break;
         case parser::BinaryExpression::Op::Mul:
-            emit_opcode(ir::OpCode::MUL);
+            emit_mul();
             break;
         case parser::BinaryExpression::Op::Div:
-            emit_opcode(ir::OpCode::DIV);
+            emit_div();
             break;
         case parser::BinaryExpression::Op::Leq:
-            emit_opcode(ir::OpCode::CMP_LE);
+            emit_le();
             break;
         case parser::BinaryExpression::Op::Less:
-            emit_opcode(ir::OpCode::CMP_LT);
+            emit_lt();
             break;
         case parser::BinaryExpression::Op::Eq:
-            emit_opcode(ir::OpCode::CMP_EQ);
+            emit_eq();
             break;
         case parser::BinaryExpression::Op::Gt:
-            emit_opcode(ir::OpCode::CMP_GT);
+            emit_gt();
             break;
         case parser::BinaryExpression::Op::Geq:
-            emit_opcode(ir::OpCode::CMP_GE);
+            emit_ge();
             break;
         default:
             throw std::runtime_error("Unsupported binary op in refactored IR Gen");
     }
 }
 
-void IRGenerator::visit(const parser::StringLiteral &node) {
-    emit_opcode(ir::OpCode::PUSH_STR);
-    emit_uint32(get_string_id(node.value));
-}
+void IRGenerator::visit(const parser::StringLiteral &node) { emit_push_str(get_string_id(node.value)); }
 
 void IRGenerator::visit(const parser::FunctionCall &node) {
     uint8_t total_slots = 0;
@@ -433,22 +376,16 @@ void IRGenerator::visit(const parser::FunctionCall &node) {
             if (object_is_pointer) {
                 // Object is a pointer variable, load its value
                 if (s.is_global) {
-                    emit_opcode(ir::OpCode::LOAD_GLOBAL);
-                    emit_uint16(s.slot);
-                    emit_byte(s.size);
+                    emit_load_global(s.slot, s.size);
                 } else {
-                    emit_opcode(ir::OpCode::LOAD_VAR);
-                    emit_uint16(s.slot);
-                    emit_byte(s.size);
+                    emit_load_var(s.slot, s.size);
                 }
             } else {
                 // Object is a value, take its address
                 if (s.is_global) {
-                    emit_opcode(ir::OpCode::LEA_GLOBAL);
-                    emit_uint16(s.slot);
+                    emit_lea_global(s.slot);
                 } else {
-                    emit_opcode(ir::OpCode::LEA_STACK);
-                    emit_uint16(s.slot);
+                    emit_lea_stack(s.slot);
                 }
             }
             total_slots += 1;  // 'this' pointer is 1 slot
@@ -476,16 +413,14 @@ void IRGenerator::visit(const parser::FunctionCall &node) {
         num_args |= 0x80;
     }
     if (node.name == "syscall") {
-        emit_opcode(ir::OpCode::SYSCALL);
-        emit_byte(num_args);
+        emit_syscall(num_args);
     } else {
-        emit_opcode(ir::OpCode::CALL);
-        m_call_patches.push_back({m_program.bytecode.size(), node.name});
-        emit_uint32(0);
-        emit_byte(num_args);
+        size_t patch_pos = m_program.bytecode.size() + 1;
+        m_call_patches.push_back({patch_pos, node.name});
+        emit_call(0, num_args);
     }
 }
 
-void IRGenerator::visit(const parser::VarargExpression &node) { emit_opcode(ir::OpCode::PUSH_VARARGS); }
+void IRGenerator::visit(const parser::VarargExpression &node) { emit_push_varargs(); }
 
 }  // namespace ether::ir_gen
