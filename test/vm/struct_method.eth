@@ -1,0 +1,17 @@
+// EXPECTED_RESULT: 11
+struct Point {
+    i32 x;
+}
+
+void Point::add(ptr(Point) this) {
+    this.x = this.x + 1;
+}
+
+i32 main() {
+    Point p;
+    p.x = 10;
+    
+    p.add();
+    
+    return p.x;
+}

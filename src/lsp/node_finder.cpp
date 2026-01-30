@@ -15,6 +15,27 @@ std::string NodeFinder::find_struct_in_type(const DataType &type) {
     return "";
 }
 
+void NodeFinder::check_complex_type(const DataType &type, int type_line, int start_col) {
+    if (found) return;
+
+    // Only check if on the same line
+    if (this->line != type_line) return;
+
+    if (type.kind == DataType::Kind::Struct) {
+        // Struct name starts at start_col
+        int len = (int)type.struct_name.size();
+        if (this->col >= start_col && this->col < start_col + len) {
+            resolve_struct(type.struct_name);
+        }
+    } else if (type.kind == DataType::Kind::Ptr && type.inner) {
+        // "ptr(" -> +4
+        check_complex_type(*type.inner, type_line, start_col + 4);
+    } else if (type.kind == DataType::Kind::Coroutine && type.inner) {
+        // "coroutine(" -> +10
+        check_complex_type(*type.inner, type_line, start_col + 10);
+    }
+}
+
 void NodeFinder::resolve_struct(const std::string &name) {
     if (!root_program) return;
     for (const auto &s : root_program->structs) {
@@ -80,13 +101,23 @@ void NodeFinder::visit(const Function &node) {
         return;
     }
 
-    // Return type
-    if (node.line == line && col >= node.column && col < node.name_col) {
-        std::string s_name = find_struct_in_type(node.return_type);
-        if (!s_name.empty()) {
-            resolve_struct(s_name);
+    // Check for Struct Name in method declaration (e.g. "Point::add")
+    if (!node.struct_name.empty() && node.name_line == line) {
+        int struct_name_col = node.name_col - (int)node.struct_name.size() - 2;
+        if (col >= struct_name_col && col < struct_name_col + (int)node.struct_name.size()) {
+            resolve_struct(node.struct_name);
             if (found) return;
         }
+    }
+
+    // Return type
+    check_complex_type(node.return_type, node.line, node.column);
+    if (found) return;
+
+    // Parameters
+    for (const auto &p : node.params) {
+        check_complex_type(p.type, p.line, p.col);
+        if (found) return;
     }
 
     if (node.body) node.body->accept(*this);
@@ -116,13 +147,8 @@ void NodeFinder::visit(const VariableDeclaration &node) {
     }
 
     // Check if cursor is on the type area
-    if (node.line == line && col >= node.column && col < node.name_col) {
-        std::string s_name = find_struct_in_type(node.type);
-        if (!s_name.empty()) {
-            resolve_struct(s_name);
-            if (found) return;
-        }
-    }
+    check_complex_type(node.type, node.line, node.column);
+    if (found) return;
 
     if (node.init) node.init->accept(*this);
 }
@@ -131,12 +157,12 @@ void NodeFinder::visit(const FunctionCall &node) {
     if (found || node.filename != target_filename) return;
     debug_msg("Visiting function call " << node.name << " at " << node.filename << ":" << node.line << ":"
                                         << node.column);
-    if (node.line == line && col >= node.column && col < node.column + (int)node.name.size()) {
+    if (node.line == line && col >= node.column && col < node.column + (int)node.length) {
         found = true;
         def_filename = node.decl_filename;
         def_line = node.decl_line;
         def_col = node.decl_col;
-        def_size = (int)node.name.size();
+        def_size = (int)node.length;
         std::stringstream ss;
         ss << "(call) ";
         if (node.type) {
@@ -153,6 +179,7 @@ void NodeFinder::visit(const FunctionCall &node) {
         hover_info = ss.str();
         return;
     }
+    if (node.object) node.object->accept(*this);
     for (auto &a : node.args) {
         if (found) return;
         a->accept(*this);
@@ -163,12 +190,12 @@ void NodeFinder::visit(const VariableExpression &node) {
     if (found || node.filename != target_filename) return;
     debug_msg("Visiting variable expression " << node.name << " at " << node.filename << ":" << node.line << ":"
                                               << node.column);
-    if (node.line == line && col >= node.column && col < node.column + (int)node.name.size()) {
+    if (node.line == line && col >= node.column && col < node.column + (int)node.length) {
         found = true;
         def_filename = node.decl_filename;
         def_line = node.decl_line;
         def_col = node.decl_col;
-        def_size = (int)node.name.size();
+        def_size = (int)node.length;
         if (node.type) {
             hover_info = "(variable) " + node.type->to_string() + " " + node.name;
             found_type = *node.type;
@@ -296,7 +323,15 @@ void NodeFinder::visit(const StructDeclaration &node) {
             ss << "  " << m.type.to_string() << " " << m.name << ";\n";
         }
         ss << "}";
+        ss << "}";
         hover_info = ss.str();
+        return;
+    }
+
+    // Check member types
+    for (const auto &m : node.members) {
+        check_complex_type(m.type, m.line, m.col);
+        if (found) return;
     }
 }
 

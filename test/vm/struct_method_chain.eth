@@ -1,0 +1,21 @@
+// EXPECTED_RESULT: 3
+struct Counter {
+    i32 val;
+}
+
+void Counter::inc(ptr(Counter) this) {
+    this.val = this.val + 1;
+}
+
+void Counter::addTwo(ptr(Counter) this) {
+    // Calling another method on `this`
+    this.inc();
+    this.inc();
+}
+
+i32 main() {
+    Counter c;
+    c.val = 1;
+    c.addTwo();
+    return c.val;
+}

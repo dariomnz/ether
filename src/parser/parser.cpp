@@ -153,6 +153,22 @@ void Parser::parse_top_level(Program &program) {
     }
     const auto &name_token = advance();
     auto name = name_token.lexeme;
+    std::string struct_name = "";
+    int method_name_line = name_token.line;
+    int method_name_col = name_token.column;
+
+    if (match(lexer::TokenType::ColonColon)) {
+        if (!check(lexer::TokenType::Identifier)) {
+            const auto &token = peek();
+            throw CompilerError("Expected method name after '::'", m_filename, token.line, token.column,
+                                (int)token.lexeme.size());
+        }
+        struct_name = name;
+        const auto &method_token = advance();
+        name = method_token.lexeme;
+        method_name_line = method_token.line;
+        method_name_col = method_token.column;
+    }
 
     if (check(lexer::TokenType::LParent)) {
         advance();  // skip '('
@@ -188,9 +204,13 @@ void Parser::parse_top_level(Program &program) {
         if (len < 1) len = (int)name.size();
 
         program.functions.push_back(std::make_unique<Function>(
-            type, std::string(name), name_token.line, name_token.column, std::move(params), is_variadic,
-            std::move(body), m_filename, start_token.line, start_token.column, len));
+            type, std::string(name), method_name_line, method_name_col, std::move(params), is_variadic, std::move(body),
+            m_filename, start_token.line, start_token.column, len, struct_name));
     } else {
+        if (!struct_name.empty()) {
+            throw CompilerError("Unexpected '::' in variable declaration", m_filename, name_token.line,
+                                name_token.column);
+        }
         // It's a global variable
         std::unique_ptr<Expression> init = nullptr;
         if (match(lexer::TokenType::Equal)) {
@@ -218,6 +238,16 @@ std::unique_ptr<Function> Parser::parse_function() {
     }
     const auto &name_token = advance();
     auto name = name_token.lexeme;
+    std::string struct_name = "";
+
+    if (match(lexer::TokenType::ColonColon)) {
+        if (!check(lexer::TokenType::Identifier)) {
+            const auto &token = peek();
+            throw CompilerError("Expected method name after '::'", m_filename, token.line, token.column);
+        }
+        struct_name = name;
+        name = advance().lexeme;
+    }
 
     if (!match(lexer::TokenType::LParent)) {
         const auto &token = peek();
@@ -254,7 +284,7 @@ std::unique_ptr<Function> Parser::parse_function() {
     int len = (int)(m_tokens[m_pos - 1].column - start_token.column);
     return std::make_unique<Function>(return_type, std::string(name), name_token.line, name_token.column,
                                       std::move(params), is_variadic, std::move(body), m_filename, start_token.line,
-                                      start_token.column, len);
+                                      start_token.column, len, struct_name);
 }
 
 std::unique_ptr<Block> Parser::parse_block() {
@@ -590,7 +620,7 @@ std::unique_ptr<Expression> Parser::parse_primary() {
                 throw CompilerError("Expected ')' after arguments", m_filename, err_tok.line, err_tok.column,
                                     (int)err_tok.lexeme.size());
             }
-            int len = (int)(m_tokens[m_pos - 1].column - token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
+            int len = (int)name.size();
             expr = std::make_unique<FunctionCall>(std::move(name), std::move(args), m_filename, token.line,
                                                   token.column, len);
         } else {
@@ -603,10 +633,37 @@ std::unique_ptr<Expression> Parser::parse_primary() {
                 if (!check(lexer::TokenType::Identifier)) {
                     throw CompilerError("Expected member name after '.'", m_filename, peek().line, peek().column);
                 }
+                const auto &member_token = peek();
                 std::string member = std::string(advance().lexeme);
-                int len = (int)(m_tokens[m_pos - 1].column - token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
-                expr = std::make_unique<MemberAccessExpression>(std::move(expr), std::move(member), m_filename,
-                                                                token.line, token.column, len);
+
+                if (match(lexer::TokenType::LParent)) {
+                    std::vector<std::unique_ptr<Expression>> args;
+                    if (!check(lexer::TokenType::RParent)) {
+                        do {
+                            if (match(lexer::TokenType::Ellipsis)) {
+                                const auto &el_tok = m_tokens[m_pos - 1];
+                                args.push_back(std::make_unique<VarargExpression>(
+                                    m_filename, el_tok.line, el_tok.column, (int)el_tok.lexeme.size()));
+                            } else {
+                                args.push_back(parse_expression());
+                            }
+                        } while (match(lexer::TokenType::Comma));
+                    }
+                    if (!match(lexer::TokenType::RParent)) {
+                        const auto &err_tok = peek();
+                        throw CompilerError("Expected ')' after arguments", m_filename, err_tok.line, err_tok.column,
+                                            (int)err_tok.lexeme.size());
+                    }
+                    // Use member token coordinates and length for the FunctionCall
+                    // User requested that only the method name is highlighted/considered, not the args.
+                    expr = std::make_unique<FunctionCall>(std::move(member), std::move(args), m_filename,
+                                                          member_token.line, member_token.column, (int)member.size(),
+                                                          std::move(expr));
+                } else {
+                    int len = (int)(m_tokens[m_pos - 1].column - token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
+                    expr = std::make_unique<MemberAccessExpression>(std::move(expr), std::move(member), m_filename,
+                                                                    token.line, token.column, len);
+                }
             } else if (match(lexer::TokenType::LBracket)) {
                 auto index = parse_expression();
                 if (!match(lexer::TokenType::RBracket)) {

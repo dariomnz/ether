@@ -1,0 +1,23 @@
+// ARGS: --dump-ir
+// EXPECTED_OUTPUT: <function: use_ptr> (params: 1, slots: 1)
+// EXPECTED_OUTPUT:   42: LOAD_VAR            slot 0 size 1
+// EXPECTED_OUTPUT:   45: CALL                addr 7 args 1 <Point::reset>
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+void Point::reset(ptr(Point) this) {
+    this.x = 0;
+    this.y = 0;
+}
+
+void use_ptr(ptr(Point) p) {
+    p.reset();
+}
+
+i32 main() {
+    ptr(Point) p;
+    use_ptr(p);
+    return 0;
+}

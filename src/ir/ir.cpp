@@ -35,6 +35,8 @@ std::ostream &operator<<(std::ostream &os, OpCode op) {
         {OpCode::STORE_GLOBAL, "STORE_GLOBAL"},
         {OpCode::LOAD_PTR_OFFSET, "LOAD_PTR_OFFSET"},
         {OpCode::STORE_PTR_OFFSET, "STORE_PTR_OFFSET"},
+        {OpCode::LEA_STACK, "LEA_STACK"},
+        {OpCode::LEA_GLOBAL, "LEA_GLOBAL"},
     };
     auto it = op_to_str.find(op);
     if (it != op_to_str.end()) {

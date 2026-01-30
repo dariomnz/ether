@@ -1,0 +1,12 @@
+// EXPECTED_OUTPUT: Undefined struct Ghost
+struct Point {
+    i32 x;
+}
+
+// Defining method for non-existent struct
+void Ghost::boo(ptr(Ghost) this) {
+}
+
+i32 main() {
+    return 0;
+}

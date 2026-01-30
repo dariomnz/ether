@@ -114,6 +114,17 @@ void disassemble(const IRProgram &program) {
                 std::cout << "global_slot " << (int)slot << " size " << (int)size;
                 break;
             }
+            case OpCode::LEA_STACK: {
+                uint8_t slot = code[ip++];
+                std::cout << "slot " << (int)slot;
+                break;
+            }
+            case OpCode::LEA_GLOBAL: {
+                uint16_t slot = *(uint16_t *)&code[ip];
+                ip += 2;
+                std::cout << "global_slot " << (int)slot;
+                break;
+            }
             case OpCode::LOAD_PTR_OFFSET:
             case OpCode::STORE_PTR_OFFSET: {
                 uint32_t offset = *(uint32_t *)&code[ip];

@@ -129,7 +129,11 @@ void IRGenerator::visit(const parser::Function &func) {
     }
 
     // Record how many slots this function needs
-    m_program.functions[func.name].num_slots = m_scopes.back().next_slot;
+    std::string func_name = func.name;
+    if (!func.struct_name.empty()) {
+        func_name = func.struct_name + "::" + func_name;
+    }
+    m_program.functions[func_name].num_slots = m_scopes.back().next_slot;
     m_scopes.pop_back();
 }
 
@@ -413,6 +417,48 @@ void IRGenerator::visit(const parser::StringLiteral &node) {
 
 void IRGenerator::visit(const parser::FunctionCall &node) {
     uint8_t total_slots = 0;
+
+    // If this is a method call, push 'this' pointer first
+    if (node.object) {
+        // Check if the object is already a pointer type
+        bool object_is_pointer = false;
+        if (node.object->type && node.object->type->kind == parser::DataType::Kind::Ptr) {
+            object_is_pointer = true;
+        }
+
+        // We need to push the address of the object (or the pointer itself if already a pointer)
+        if (auto *var_expr = dynamic_cast<const parser::VariableExpression *>(node.object.get())) {
+            Symbol s = get_var_symbol(var_expr->name);
+
+            if (object_is_pointer) {
+                // Object is a pointer variable, load its value
+                if (s.is_global) {
+                    emit_opcode(ir::OpCode::LOAD_GLOBAL);
+                    emit_uint16(s.slot);
+                    emit_byte(s.size);
+                } else {
+                    emit_opcode(ir::OpCode::LOAD_VAR);
+                    emit_byte((uint8_t)s.slot);
+                    emit_byte(s.size);
+                }
+            } else {
+                // Object is a value, take its address
+                if (s.is_global) {
+                    emit_opcode(ir::OpCode::LEA_GLOBAL);
+                    emit_uint16(s.slot);
+                } else {
+                    emit_opcode(ir::OpCode::LEA_STACK);
+                    emit_byte((uint8_t)s.slot);
+                }
+            }
+            total_slots += 1;  // 'this' pointer is 1 slot
+        } else {
+            // For more complex expressions, evaluate and assume it's already a pointer
+            node.object->accept(*this);
+            total_slots += 1;
+        }
+    }
+
     for (const auto &arg : node.args) {
         arg->accept(*this);
         // Calculate size of argument

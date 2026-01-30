@@ -254,7 +254,7 @@ void LSPServer::on_semantic_tokens(const std::string& id, const std::string& par
 
     SemanticTokensVisitor visitor(uri);
     doc.ast->accept(visitor);
-    std::sort(visitor.tokens.begin(), visitor.tokens.end());
+    std::stable_sort(visitor.tokens.begin(), visitor.tokens.end());
 
     std::vector<int> data;
     int last_line = 1;
@@ -457,6 +457,8 @@ void LSPServer::on_completion(const std::string& id, const std::string& params) 
                     std::stringstream json;
                     json << "{\"isIncomplete\":false,\"items\":[";
                     bool first = true;
+
+                    // Add struct members
                     for (const auto& m : s->members) {
                         if (!first) json << ",";
                         json << "{"
@@ -466,6 +468,37 @@ void LSPServer::on_completion(const std::string& id, const std::string& params) 
                              << "}";
                         first = false;
                     }
+
+                    // Add struct methods
+                    for (const auto& f : doc.ast->functions) {
+                        if (!f->struct_name.empty() && f->struct_name == s_name) {
+                            if (!first) json << ",";
+
+                            // Build method signature
+                            std::stringstream sig;
+                            sig << f->return_type.to_string() << " " << f->name << "(";
+                            bool first_param = true;
+                            // Skip first parameter (this pointer)
+                            for (size_t i = 1; i < f->params.size(); ++i) {
+                                if (!first_param) sig << ", ";
+                                sig << f->params[i].type.to_string() << " " << f->params[i].name;
+                                first_param = false;
+                            }
+                            if (f->is_variadic) {
+                                if (!first_param) sig << ", ";
+                                sig << "...";
+                            }
+                            sig << ")";
+
+                            json << "{"
+                                 << "\"label\":\"" << escape_json(f->name) << "\","
+                                 << "\"kind\":2,"  // Method
+                                 << "\"detail\":\"" << escape_json(sig.str()) << "\""
+                                 << "}";
+                            first = false;
+                        }
+                    }
+
                     json << "]}";
                     send_response(id, json.str());
                     return;

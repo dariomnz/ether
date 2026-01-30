@@ -63,7 +63,6 @@ struct ConstASTVisitor {
     virtual void visit(const Program& node) = 0;
 };
 
-
 struct ASTVisitor {
     virtual ~ASTVisitor() = default;
     virtual void visit(IntegerLiteral& node) = 0;
@@ -226,8 +225,10 @@ struct FunctionCall : Expression {
     int decl_col = 0;
     std::vector<DataType> param_types;
     bool is_variadic = false;
-    FunctionCall(std::string n, std::vector<std::unique_ptr<Expression>> a, std::string fn, int l, int c, int len)
-        : Expression(std::move(fn), l, c, len), name(std::move(n)), args(std::move(a)) {}
+    std::unique_ptr<Expression> object = nullptr;  // For method calls
+    FunctionCall(std::string n, std::vector<std::unique_ptr<Expression>> a, std::string fn, int l, int c, int len,
+                 std::unique_ptr<Expression> obj = nullptr)
+        : Expression(std::move(fn), l, c, len), name(std::move(n)), args(std::move(a)), object(std::move(obj)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
     void accept(ConstASTVisitor& visitor) const override { visitor.visit(*this); }
 };
@@ -417,8 +418,9 @@ struct Function : Expression {
     std::vector<Parameter> params;
     bool is_variadic;
     std::unique_ptr<Block> body;
+    std::string struct_name;  // For methods
     Function(DataType rt, std::string n, int nl, int nc, std::vector<Parameter> p, bool variadic,
-             std::unique_ptr<Block> b, std::string fn, int l, int c, int len)
+             std::unique_ptr<Block> b, std::string fn, int l, int c, int len, std::string sn = "")
         : Expression(std::move(fn), l, c, len),
           return_type(rt),
           name(std::move(n)),
@@ -426,7 +428,8 @@ struct Function : Expression {
           name_col(nc),
           params(std::move(p)),
           is_variadic(variadic),
-          body(std::move(b)) {}
+          body(std::move(b)),
+          struct_name(std::move(sn)) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
     void accept(ConstASTVisitor& visitor) const override { visitor.visit(*this); }
 };

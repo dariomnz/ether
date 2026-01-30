@@ -4,7 +4,6 @@
 
 #include "ir/dependency_tracker.hpp"
 
-
 namespace ether::ir_gen {
 
 ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
@@ -19,7 +18,11 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
     // 1. Dependency Tracking
     std::unordered_map<std::string, const parser::Function *> all_funcs;
     for (const auto &func : ast.functions) {
-        all_funcs[func->name] = func.get();
+        std::string name = func->name;
+        if (!func->struct_name.empty()) {
+            name = func->struct_name + "::" + name;
+        }
+        all_funcs[name] = func.get();
     }
     std::unordered_map<std::string, const parser::VariableDeclaration *> all_globals_map;
     for (const auto &global : ast.globals) {
@@ -111,8 +114,12 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
 
 void IRGenerator::visit(const parser::Program &node) {
     for (const auto &func : node.functions) {
-        if (!m_reachable.contains(func->name)) continue;
-        m_program.functions[func->name].entry_addr = m_program.bytecode.size();
+        std::string name = func->name;
+        if (!func->struct_name.empty()) {
+            name = func->struct_name + "::" + name;
+        }
+        if (!m_reachable.contains(name)) continue;
+        m_program.functions[name].entry_addr = m_program.bytecode.size();
         func->accept(*this);
     }
     for (const auto &str : node.structs) {

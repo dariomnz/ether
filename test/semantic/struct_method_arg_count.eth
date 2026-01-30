@@ -1,0 +1,15 @@
+// EXPECTED_OUTPUT: Wrong number of arguments for Point::add
+struct Point {
+    i32 x;
+}
+
+void Point::add(ptr(Point) this, i32 val) {
+    this.x = this.x + val;
+}
+
+i32 main() {
+    Point p;
+    // Missing argument
+    p.add();
+    return 0;
+}

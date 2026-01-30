@@ -55,6 +55,7 @@ enum class TokenType {
     Comma,
     Ellipsis,
     Dot,
+    ColonColon,
 
     // special
     EOF_TOKEN,

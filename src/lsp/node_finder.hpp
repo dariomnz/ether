@@ -19,6 +19,7 @@ struct NodeFinder : public parser::ConstASTVisitor {
 
     std::string find_struct_in_type(const parser::DataType &type);
     void resolve_struct(const std::string &name);
+    void check_complex_type(const parser::DataType &type, int line, int start_col);
 
     void visit(const parser::Program &node) override;
     void visit(const parser::Function &node) override;

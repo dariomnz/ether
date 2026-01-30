@@ -33,6 +33,7 @@ struct Value {
     Value(int32_t v) : type(ValueType::I32) { as.i32 = v; }
     Value(int16_t v) : type(ValueType::I16) { as.i16 = v; }
     Value(int8_t v) : type(ValueType::I8) { as.i8 = v; }
+    Value(void* v) : type(ValueType::Ptr) { as.ptr = v; }
     Value(std::string_view v) : type(ValueType::String) {
         as.str = v.data();
         str_len = static_cast<uint32_t>(v.size());

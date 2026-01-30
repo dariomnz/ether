@@ -1,0 +1,15 @@
+// EXPECTED_OUTPUT: Struct Point has no method named sub
+struct Point {
+    i32 x;
+}
+
+void Point::add(ptr(Point) this) {
+    this.x = this.x + 1;
+}
+
+i32 main() {
+    Point p;
+    // Calling undefined method
+    p.sub();
+    return 0;
+}

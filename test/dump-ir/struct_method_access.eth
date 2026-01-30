@@ -1,0 +1,16 @@
+// ARGS: --dump-ir
+// EXPECTED_OUTPUT: <function: Data::get_id> (params: 1, slots: 1)
+// EXPECTED_OUTPUT:   7: LOAD_VAR            slot 0 size 1
+// EXPECTED_OUTPUT:   10: LOAD_PTR_OFFSET     offset 0 size 1
+struct Data {
+    i32 id;
+}
+
+i32 Data::get_id(ptr(Data) this) {
+    return this.id;
+}
+
+i32 main() {
+    Data d;
+    return d.get_id();
+}

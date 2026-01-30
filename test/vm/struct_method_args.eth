@@ -1,0 +1,15 @@
+// EXPECTED_RESULT: 30
+struct Calculator {
+    i32 result;
+}
+
+i32 Calculator::add(ptr(Calculator) this, i32 a, i32 b) {
+    this.result = a + b;
+    return this.result;
+}
+
+i32 main() {
+    Calculator calc;
+    calc.add(10, 20);
+    return calc.result;
+}

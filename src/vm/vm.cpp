@@ -21,6 +21,8 @@ VM::VM(const ir::IRProgram &program) : program_(program) {
     if (main_it != program.functions.end()) {
         main_coro->stack.resize(main_it->second.num_slots);
     }
+    // Reserve large capacity to prevent pointer invalidation
+    main_coro->stack.reserve(65536);
 
     m_coroutines.push_back(std::move(main_coro));
 
@@ -424,10 +426,28 @@ Value VM::run(bool collect_stats) {
                     if (num_slots > num_args_passed) {
                         new_coro->stack.resize(num_slots);
                     }
+                    new_coro->stack.reserve(65536);  // Prevent pointer invalidation
 
                     m_coroutines.push_back(std::move(new_coro));
                     push(Value((int32_t)new_id));
                     m_current_coro = m_coroutines.size() - 1;
+                    break;
+                }
+
+                case ir::OpCode::LEA_STACK: {
+                    uint8_t slot = READ_BYTE();
+                    size_t base = CUR_CORO().call_stack.back().stack_base;
+                    // Taking address of stack element
+                    // WARNING: Unsafe if stack reallocates. We reserve 64k to mitigate.
+                    Value *ptr = &CUR_CORO().stack[base + slot];
+                    push(Value(ptr));
+                    break;
+                }
+
+                case ir::OpCode::LEA_GLOBAL: {
+                    uint16_t slot = READ_UINT16();
+                    Value *ptr = &m_globals[slot];
+                    push(Value(ptr));
                     break;
                 }
 

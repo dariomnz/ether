@@ -1,10 +1,24 @@
 #include "lsp/semantic_tokens.hpp"
+#include <iostream>
 
 #include "parser/ast.hpp"
 
 namespace ether::lsp {
 
 using namespace ether::parser;
+
+void SemanticTokensVisitor::highlight_complex_type(const DataType &type, int line, int start_col) {
+    if (type.kind == DataType::Kind::Struct) {
+        tokens.push_back({line, start_col, (int)type.struct_name.size(), 3});
+    } else if (type.kind == DataType::Kind::Ptr && type.inner) {
+        // "ptr" is keyword (offset 0), inner starts at offset 4 "ptr("
+        // But we rely on lexer coloring "ptr". We iterate inside.
+        highlight_complex_type(*type.inner, line, start_col + 4);
+    } else if (type.kind == DataType::Kind::Coroutine && type.inner) {
+        // "coroutine(" -> 10 chars
+        highlight_complex_type(*type.inner, line, start_col + 10);
+    }
+}
 
 void SemanticTokensVisitor::visit(const Program &node) {
     for (auto &s : node.structs) s->accept(*this);
@@ -15,19 +29,21 @@ void SemanticTokensVisitor::visit(const Program &node) {
 void SemanticTokensVisitor::visit(const Function &node) {
     if (node.filename != target_filename) return;
 
-    // Return type: if struct, highlight as type 3
-    if (node.return_type.kind == DataType::Kind::Struct) {
-        tokens.push_back({node.line, node.column, (int)node.return_type.struct_name.size(), 3});
+    // Return type
+    highlight_complex_type(node.return_type, node.line, node.column);
+
+    // If this is a method, highlight the struct name before ::
+    if (!node.struct_name.empty()) {
+        int struct_name_col = node.name_col - (int)node.struct_name.size() - 2;
+        tokens.push_back({node.name_line, struct_name_col, (int)node.struct_name.size(), 3});
     }
 
     // Function name: type 0
-    tokens.push_back({node.name_line, node.name_col, (int)node.name.size(), 0});
+    tokens.push_back({node.name_line, node.name_col, (int)node.length, 0});
 
     // Parameters
     for (const auto &p : node.params) {
-        if (p.type.kind == DataType::Kind::Struct) {
-            tokens.push_back({p.line, p.col, (int)p.type.struct_name.size(), 3});
-        }
+        highlight_complex_type(p.type, p.line, p.col);
         // Parameter name: type 2
         tokens.push_back({p.name_line, p.name_col, (int)p.name.size(), 2});
     }
@@ -42,10 +58,8 @@ void SemanticTokensVisitor::visit(const Block &node) {
 void SemanticTokensVisitor::visit(const VariableDeclaration &node) {
     if (node.filename != target_filename) return;
 
-    // Type: if struct, highlight as type 3
-    if (node.type.kind == DataType::Kind::Struct) {
-        tokens.push_back({node.line, node.column, (int)node.type.struct_name.size(), 3});
-    }
+    // Type
+    highlight_complex_type(node.type, node.line, node.column);
 
     // Variable name: type 1
     tokens.push_back({node.name_line, node.name_col, (int)node.name.size(), 1});
@@ -58,8 +72,8 @@ void SemanticTokensVisitor::visit(const VariableExpression &node) {
 }
 
 void SemanticTokensVisitor::visit(const FunctionCall &node) {
-    // Function call: type 0
-    tokens.push_back({node.line, node.column, (int)node.name.size(), 0});
+    if (node.object) node.object->accept(*this);
+    tokens.push_back({node.line, node.column, node.length, 0});
     for (auto &a : node.args) a->accept(*this);
 }
 
@@ -121,9 +135,7 @@ void SemanticTokensVisitor::visit(const StructDeclaration &node) {
 
     // Members
     for (const auto &m : node.members) {
-        if (m.type.kind == DataType::Kind::Struct) {
-            tokens.push_back({m.line, m.col, (int)m.type.struct_name.size(), 3});
-        }
+        highlight_complex_type(m.type, m.line, m.col);
         // Member name: type 1 (variable/member)
         tokens.push_back({m.name_line, m.name_col, (int)m.name.size(), 1});
     }

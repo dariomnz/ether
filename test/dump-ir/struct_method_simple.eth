@@ -1,0 +1,17 @@
+// ARGS: --dump-ir
+// EXPECTED_OUTPUT: <function: main> (params: 0, slots: 1)
+// EXPECTED_OUTPUT:   38: LEA_STACK           slot 0
+// EXPECTED_OUTPUT:   40: CALL                addr 7 args 1 <Counter::inc>
+struct Counter {
+    i32 val;
+}
+
+void Counter::inc(ptr(Counter) this) {
+    this.val = this.val + 1;
+}
+
+i32 main() {
+    Counter c;
+    c.inc();
+    return 0;
+}

@@ -25,6 +25,8 @@ struct SemanticTokensVisitor : public parser::ConstASTVisitor {
 
     SemanticTokensVisitor(std::string filename) : target_filename(std::move(filename)) {}
 
+    void highlight_complex_type(const parser::DataType &type, int line, int start_col);
+
     void visit(const parser::Program &node) override;
     void visit(const parser::Function &node) override;
     void visit(const parser::Block &node) override;

@@ -210,6 +210,13 @@ Token Lexer::next_token() {
             }
             return {TokenType::Greater, ">", start_line, start_col};
         }
+        case ':': {
+            if (peek() == ':') {
+                advance();
+                return {TokenType::ColonColon, "::", start_line, start_col};
+            }
+            return {TokenType::Unknown, lexeme, start_line, start_col};
+        }
     }
 
     return {TokenType::Unknown, lexeme, start_line, start_col};
