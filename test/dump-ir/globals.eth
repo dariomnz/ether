@@ -1,0 +1,9 @@
+// ARGS: --dump-ir
+// EXPECTED_OUTPUT: <function: main> (params: 0, slots: 0)
+// EXPECTED_OUTPUT: LOAD_GLOBAL         global_slot 0
+// EXPECTED_OUTPUT: RET
+i32 MAX_COUNT = 100;
+
+i32 main() {
+    return MAX_COUNT;
+}

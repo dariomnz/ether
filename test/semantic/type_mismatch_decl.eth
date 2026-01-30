@@ -1,0 +1,5 @@
+// EXPECTED_OUTPUT: Type mismatch in variable declaration: expected i32, but got string
+i32 main() {
+    i32 x = "hello";
+    return 0;
+}

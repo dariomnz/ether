@@ -1,0 +1,6 @@
+// EXPECTED_OUTPUT: Semantic Error: 'await' expects a coroutine handle, but got i32
+i32 main() {
+    i32 x = 10;
+    await x;
+    return 0;
+}

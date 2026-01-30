@@ -1,0 +1,7 @@
+// EXPECTED_OUTPUT: Wrong number of arguments for foo
+i32 foo(i32 a) { return a; }
+
+i32 main() {
+    foo(1, 2);
+    return 0;
+}

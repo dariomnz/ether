@@ -1,0 +1,11 @@
+// EXPECTED_OUTPUT: Struct Point has no member named z
+struct Point {
+    i32 x;
+    i32 y;
+}
+
+i32 main() {
+    Point p;
+    p.z = 10;
+    return 0;
+}

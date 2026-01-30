@@ -1,0 +1,12 @@
+// EXPECTED_OUTPUT: 120
+#include "std/io.eth"
+
+i32 fact(i32 n) {
+    if (n <= 1) { return 1; }
+    return n * fact(n - 1);
+}
+
+i32 main() {
+    printf("%d\n", fact(5));
+    return 0;
+}

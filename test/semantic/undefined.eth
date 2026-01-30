@@ -1,0 +1,5 @@
+// EXPECTED_OUTPUT: Undefined variable: y
+i32 main() {
+    i32 x = y; 
+    return 0;
+}

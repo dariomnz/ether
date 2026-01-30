@@ -1,0 +1,6 @@
+// EXPECTED_OUTPUT: Member access '.' requires struct or struct pointer, but got i32
+i32 main() {
+    i32 x = 0;
+    x.y = 10;
+    return 0;
+}

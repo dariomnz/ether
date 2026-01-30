@@ -1,0 +1,9 @@
+// EXPECTED_OUTPUT: Shadowing test
+// EXPECTED_RESULT: 0
+#include "std/io.eth"
+i32 main() {
+    i32 x = 1;
+    i32 x = 2; // Shadowing allowed
+    printf("Shadowing test\n");
+    return 0;
+}

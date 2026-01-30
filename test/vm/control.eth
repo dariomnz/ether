@@ -1,0 +1,26 @@
+// EXPECTED_OUTPUT: A
+// EXPECTED_OUTPUT: C
+// EXPECTED_OUTPUT: 0
+// EXPECTED_OUTPUT: 1
+// EXPECTED_OUTPUT: 2
+#include "std/io.eth"
+i32 main() {
+    if (1) {
+        printf("A\n");
+    } else {
+        printf("Should not print\n");
+    }
+
+    if (0) {
+        printf("B\n");
+    } else {
+        printf("C\n");
+    }
+
+    // while not supported, use for
+    i32 i = 0;
+    for (; i < 3; i++) {
+        printf("%d\n", i);
+    }
+    return 0;
+}

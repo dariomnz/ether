@@ -1,0 +1,20 @@
+// ARGS: --dump-ir
+// EXPECTED_OUTPUT: <function: worker> (params: 0, slots: 0)
+// EXPECTED_OUTPUT: YIELD
+// EXPECTED_OUTPUT: PUSH_I32            42
+// EXPECTED_OUTPUT: RET
+// EXPECTED_OUTPUT: <function: main> (params: 0, slots: 1)
+// EXPECTED_OUTPUT: SPAWN               addr 7 args 0 <worker>
+// EXPECTED_OUTPUT: STORE_VAR           slot 0
+// EXPECTED_OUTPUT: LOAD_VAR            slot 0
+// EXPECTED_OUTPUT: AWAIT
+// EXPECTED_OUTPUT: RET
+i32 worker() {
+    yield;
+    return 42;
+}
+
+i32 main() {
+    coroutine(i32) c = spawn worker();
+    return await c;
+}

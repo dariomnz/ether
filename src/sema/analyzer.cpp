@@ -80,6 +80,12 @@ void Analyzer::visit(Block &block) {
 void Analyzer::visit(ReturnStatement &node) { node.expr->accept(*this); }
 
 void Analyzer::visit(VariableDeclaration &node) {
+    if (node.type.kind == DataType::Kind::Struct) {
+        if (m_structs.find(node.type.struct_name) == m_structs.end()) {
+            throw CompilerError("Undefined struct: " + node.type.struct_name, node.filename, node.line, node.column,
+                                node.length);
+        }
+    }
     if (node.init) {
         node.init->accept(*this);
         DataType init_type = m_current_type;

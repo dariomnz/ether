@@ -1,0 +1,4 @@
+// EXPECTED_OUTPUT: Undefined variable: unknown_var
+i32 main() {
+    return unknown_var;
+}

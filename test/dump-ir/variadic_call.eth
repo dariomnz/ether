@@ -1,0 +1,15 @@
+// ARGS: --dump-ir
+// EXPECTED_OUTPUT: <function: main> (params: 0, slots: 0)
+// EXPECTED_OUTPUT: PUSH_STR
+// EXPECTED_OUTPUT: PUSH_I32            42
+// EXPECTED_OUTPUT: PUSH_I32            100
+// EXPECTED_OUTPUT: PUSH_VARARGS
+// EXPECTED_OUTPUT: CALL                addr 15 args 4 (variadic) <printf>
+// EXPECTED_OUTPUT: PUSH_I32            0
+// EXPECTED_OUTPUT: RET
+#include "std/io.eth"
+
+i32 main() {
+    printf("Numbers: %d %d\n", 42, 100, ...);
+    return 0;
+}

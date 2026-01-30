@@ -1,0 +1,11 @@
+// EXPECTED_OUTPUT: Malloc ok
+#include "std/io.eth"
+
+i32 main() {
+    ptr(i32) p = malloc(8);
+    // Dereferencing not supported yet
+    // p[0] = 42; 
+    printf("Malloc ok\n");
+    free(p);
+    return 0;
+}

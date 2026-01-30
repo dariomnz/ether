@@ -1,0 +1,5 @@
+// EXPECTED_OUTPUT: Undefined struct: UnknownStruct
+i32 main() {
+    UnknownStruct x;
+    return 0;
+}

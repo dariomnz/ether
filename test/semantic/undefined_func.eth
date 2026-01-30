@@ -1,0 +1,5 @@
+// EXPECTED_OUTPUT: Undefined function: unknown_func
+i32 main() {
+    unknown_func();
+    return 0;
+}
