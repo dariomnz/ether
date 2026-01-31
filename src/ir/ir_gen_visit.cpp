@@ -215,6 +215,14 @@ void IRGenerator::visit(const parser::IntegerLiteral &node) {
     }
 }
 
+void IRGenerator::visit(const parser::FloatLiteral &node) {
+    if (node.is_f32) {
+        emit_push_f32((float)node.value);
+    } else {
+        emit_push_f64(node.value);
+    }
+}
+
 void IRGenerator::visit(const parser::VariableExpression &node) {
     Symbol s = get_var_symbol(node.name);
 
@@ -323,33 +331,66 @@ void IRGenerator::visit(const parser::SpawnExpression &node) {
 void IRGenerator::visit(const parser::BinaryExpression &node) {
     node.left->accept(*this);
     node.right->accept(*this);
+
+    bool is_float = false;
+    if (node.left && node.left->type && node.left->type->is_float()) {
+        is_float = true;
+    }
+
     switch (node.op) {
         case parser::BinaryExpression::Op::Add:
-            emit_add();
+            if (is_float)
+                emit_add_f();
+            else
+                emit_add();
             break;
         case parser::BinaryExpression::Op::Sub:
-            emit_sub();
+            if (is_float)
+                emit_sub_f();
+            else
+                emit_sub();
             break;
         case parser::BinaryExpression::Op::Mul:
-            emit_mul();
+            if (is_float)
+                emit_mul_f();
+            else
+                emit_mul();
             break;
         case parser::BinaryExpression::Op::Div:
-            emit_div();
+            if (is_float)
+                emit_div_f();
+            else
+                emit_div();
             break;
         case parser::BinaryExpression::Op::Leq:
-            emit_le();
+            if (is_float)
+                emit_le_f();
+            else
+                emit_le();
             break;
         case parser::BinaryExpression::Op::Less:
-            emit_lt();
+            if (is_float)
+                emit_lt_f();
+            else
+                emit_lt();
             break;
         case parser::BinaryExpression::Op::Eq:
-            emit_eq();
+            if (is_float)
+                emit_eq_f();
+            else
+                emit_eq();
             break;
         case parser::BinaryExpression::Op::Gt:
-            emit_gt();
+            if (is_float)
+                emit_gt_f();
+            else
+                emit_gt();
             break;
         case parser::BinaryExpression::Op::Geq:
-            emit_ge();
+            if (is_float)
+                emit_ge_f();
+            else
+                emit_ge();
             break;
         default:
             throw std::runtime_error("Unsupported binary op in refactored IR Gen");

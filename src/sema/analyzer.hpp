@@ -14,6 +14,7 @@ class Analyzer : public parser::ASTVisitor {
     void analyze(parser::Program &program);
 
     void visit(parser::IntegerLiteral &node) override;
+    void visit(parser::FloatLiteral &node) override;
     void visit(parser::StringLiteral &node) override;
     void visit(parser::VariableExpression &node) override;
     void visit(parser::FunctionCall &node) override;

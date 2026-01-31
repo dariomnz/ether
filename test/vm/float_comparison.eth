@@ -1,0 +1,27 @@
+// EXPECTED_OUTPUT: x is greater
+// EXPECTED_OUTPUT: x equals 3.14
+// EXPECTED_OUTPUT: a <= b
+// Test float comparisons
+#include "std/io.eth"
+
+i32 main() {
+    f64 x = 3.14;
+    f64 y = 2.71;
+    
+    if (x > y) {
+        printf("x is greater\n");
+    }
+    
+    if (x == 3.14) {
+        printf("x equals 3.14\n");
+    }
+    
+    f32 a = 1.0;
+    f32 b = 1.0;
+    
+    if (a <= b) {
+        printf("a <= b\n");
+    }
+    
+    return 0;
+}

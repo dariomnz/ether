@@ -11,6 +11,8 @@ enum class TokenType {
     I32,
     I16,
     I8,
+    F64,
+    F32,
     Return,
     If,
     Else,
@@ -30,6 +32,7 @@ enum class TokenType {
     // Identifiers and Literals
     Identifier,
     IntegerLiteral,
+    FloatLiteral,
     StringLiteral,
 
     // Operators

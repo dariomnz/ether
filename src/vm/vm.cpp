@@ -125,6 +125,8 @@ Value VM::run(bool collect_stats) {
 #define READ_I8()     ((int8_t)code[CUR_CORO().ip++])
 #define READ_UINT32() (*(uint32_t *)&code[(CUR_CORO().ip += 4) - 4])
 #define READ_UINT16() (*(uint16_t *)&code[(CUR_CORO().ip += 2) - 2])
+#define READ_F64()    (*(double *)&code[(CUR_CORO().ip += 8) - 8])
+#define READ_F32()    (*(float *)&code[(CUR_CORO().ip += 4) - 4])
 
         // Execute instructions until yield or termination
         bool yielded = false;
@@ -160,6 +162,14 @@ Value VM::run(bool collect_stats) {
                 }
                 case ir::OpCode::PUSH_I8: {
                     push(Value(READ_I8()));
+                    break;
+                }
+                case ir::OpCode::PUSH_F64: {
+                    push(Value(READ_F64()));
+                    break;
+                }
+                case ir::OpCode::PUSH_F32: {
+                    push(Value(READ_F32()));
                     break;
                 }
 
@@ -239,6 +249,34 @@ Value VM::run(bool collect_stats) {
                 case ir::OpCode::DIV: {
                     int64_t b = pop().i64_value();
                     int64_t a = pop().i64_value();
+                    push(Value(a / b));
+                    break;
+                }
+
+                case ir::OpCode::ADD_F: {
+                    double b = pop().f64_value();
+                    double a = pop().f64_value();
+                    push(Value(a + b));
+                    break;
+                }
+
+                case ir::OpCode::SUB_F: {
+                    double b = pop().f64_value();
+                    double a = pop().f64_value();
+                    push(Value(a - b));
+                    break;
+                }
+
+                case ir::OpCode::MUL_F: {
+                    double b = pop().f64_value();
+                    double a = pop().f64_value();
+                    push(Value(a * b));
+                    break;
+                }
+
+                case ir::OpCode::DIV_F: {
+                    double b = pop().f64_value();
+                    double a = pop().f64_value();
                     push(Value(a / b));
                     break;
                 }
@@ -385,6 +423,41 @@ Value VM::run(bool collect_stats) {
                 case ir::OpCode::CMP_GE: {
                     int64_t b = pop().i64_value();
                     int64_t a = pop().i64_value();
+                    push(Value(a >= b ? 1 : 0));
+                    break;
+                }
+
+                case ir::OpCode::CMP_EQ_F: {
+                    double b = pop().f64_value();
+                    double a = pop().f64_value();
+                    push(Value(a == b ? 1 : 0));
+                    break;
+                }
+
+                case ir::OpCode::CMP_LE_F: {
+                    double b = pop().f64_value();
+                    double a = pop().f64_value();
+                    push(Value(a <= b ? 1 : 0));
+                    break;
+                }
+
+                case ir::OpCode::CMP_LT_F: {
+                    double b = pop().f64_value();
+                    double a = pop().f64_value();
+                    push(Value(a < b ? 1 : 0));
+                    break;
+                }
+
+                case ir::OpCode::CMP_GT_F: {
+                    double b = pop().f64_value();
+                    double a = pop().f64_value();
+                    push(Value(a > b ? 1 : 0));
+                    break;
+                }
+
+                case ir::OpCode::CMP_GE_F: {
+                    double b = pop().f64_value();
+                    double a = pop().f64_value();
                     push(Value(a >= b ? 1 : 0));
                     break;
                 }

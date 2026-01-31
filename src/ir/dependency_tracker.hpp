@@ -36,6 +36,7 @@ struct DependencyTracker : public parser::ConstASTVisitor {
     }
 
     void visit(const parser::IntegerLiteral &) override {}
+    void visit(const parser::FloatLiteral &) override {}
     void visit(const parser::StringLiteral &) override {}
     void visit(const parser::VariableExpression &node) override { trace(node.name); }
     void visit(const parser::FunctionCall &node) override {

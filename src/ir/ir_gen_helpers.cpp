@@ -99,6 +99,20 @@ void IRGenerator::emit_push_i8(int8_t val) {
     emit_int8(val);
 }
 
+void IRGenerator::emit_push_f64(double val) {
+    emit_opcode(ir::OpCode::PUSH_F64);
+    uint8_t bytes[8];
+    std::memcpy(bytes, &val, 8);
+    for (int i = 0; i < 8; ++i) emit_byte(bytes[i]);
+}
+
+void IRGenerator::emit_push_f32(float val) {
+    emit_opcode(ir::OpCode::PUSH_F32);
+    uint8_t bytes[4];
+    std::memcpy(bytes, &val, 4);
+    for (int i = 0; i < 4; ++i) emit_byte(bytes[i]);
+}
+
 void IRGenerator::emit_push_str(uint32_t id) {
     emit_opcode(ir::OpCode::PUSH_STR);
     emit_uint32(id);
@@ -132,6 +146,11 @@ void IRGenerator::emit_add() { emit_opcode(ir::OpCode::ADD); }
 void IRGenerator::emit_sub() { emit_opcode(ir::OpCode::SUB); }
 void IRGenerator::emit_mul() { emit_opcode(ir::OpCode::MUL); }
 void IRGenerator::emit_div() { emit_opcode(ir::OpCode::DIV); }
+
+void IRGenerator::emit_add_f() { emit_opcode(ir::OpCode::ADD_F); }
+void IRGenerator::emit_sub_f() { emit_opcode(ir::OpCode::SUB_F); }
+void IRGenerator::emit_mul_f() { emit_opcode(ir::OpCode::MUL_F); }
+void IRGenerator::emit_div_f() { emit_opcode(ir::OpCode::DIV_F); }
 
 void IRGenerator::emit_ret(uint8_t size) {
     emit_opcode(ir::OpCode::RET);
@@ -189,5 +208,11 @@ void IRGenerator::emit_le() { emit_opcode(ir::OpCode::CMP_LE); }
 void IRGenerator::emit_lt() { emit_opcode(ir::OpCode::CMP_LT); }
 void IRGenerator::emit_gt() { emit_opcode(ir::OpCode::CMP_GT); }
 void IRGenerator::emit_ge() { emit_opcode(ir::OpCode::CMP_GE); }
+
+void IRGenerator::emit_eq_f() { emit_opcode(ir::OpCode::CMP_EQ_F); }
+void IRGenerator::emit_le_f() { emit_opcode(ir::OpCode::CMP_LE_F); }
+void IRGenerator::emit_lt_f() { emit_opcode(ir::OpCode::CMP_LT_F); }
+void IRGenerator::emit_gt_f() { emit_opcode(ir::OpCode::CMP_GT_F); }
+void IRGenerator::emit_ge_f() { emit_opcode(ir::OpCode::CMP_GE_F); }
 
 }  // namespace ether::ir_gen

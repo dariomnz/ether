@@ -27,6 +27,7 @@ class IRGenerator : public parser::ConstASTVisitor {
     ir::IRProgram generate(const parser::Program &ast);
 
     void visit(const parser::IntegerLiteral &node) override;
+    void visit(const parser::FloatLiteral &node) override;
     void visit(const parser::StringLiteral &node) override;
     void visit(const parser::VariableExpression &node) override;
     void visit(const parser::FunctionCall &node) override;
@@ -89,6 +90,8 @@ class IRGenerator : public parser::ConstASTVisitor {
     void emit_push_i32(int32_t val);
     void emit_push_i16(int16_t val);
     void emit_push_i8(int8_t val);
+    void emit_push_f64(double val);
+    void emit_push_f32(float val);
     void emit_push_str(uint32_t id);
     void emit_load_var(uint16_t slot, uint8_t size = 1);
     void emit_store_var(uint16_t slot, uint8_t size = 1);
@@ -98,6 +101,10 @@ class IRGenerator : public parser::ConstASTVisitor {
     void emit_sub();
     void emit_mul();
     void emit_div();
+    void emit_add_f();
+    void emit_sub_f();
+    void emit_mul_f();
+    void emit_div_f();
     void emit_ret(uint8_t size = 1);
     void emit_halt();
     void emit_syscall(uint8_t args);
@@ -116,6 +123,11 @@ class IRGenerator : public parser::ConstASTVisitor {
     void emit_lt();
     void emit_gt();
     void emit_ge();
+    void emit_eq_f();
+    void emit_le_f();
+    void emit_lt_f();
+    void emit_gt_f();
+    void emit_ge_f();
 
     uint32_t get_string_id(const std::string &str);
     Symbol get_var_symbol(const std::string &name);

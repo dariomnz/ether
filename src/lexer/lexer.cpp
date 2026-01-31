@@ -13,6 +13,7 @@ namespace ether::lexer {
 static const std::unordered_map<std::string_view, TokenType> keywords = {
     {"i64", TokenType::I64},       {"i32", TokenType::I32},
     {"i16", TokenType::I16},       {"i8", TokenType::I8},
+    {"f64", TokenType::F64},       {"f32", TokenType::F32},
     {"return", TokenType::Return}, {"if", TokenType::If},
     {"else", TokenType::Else},     {"while", TokenType::While},
     {"for", TokenType::For},       {"string", TokenType::String},
@@ -96,6 +97,14 @@ Token Lexer::next_token() {
     if (std::isdigit(c)) {
         size_t start_pos = m_pos;
         while (std::isdigit(peek())) advance();
+
+        if (peek() == '.') {
+            advance();  // eat '.'
+            while (std::isdigit(peek())) advance();
+            return {TokenType::FloatLiteral, std::string(m_source.substr(start_pos, m_pos - start_pos)), start_line,
+                    start_col};
+        }
+
         return {TokenType::IntegerLiteral, std::string(m_source.substr(start_pos, m_pos - start_pos)), start_line,
                 start_col};
     }

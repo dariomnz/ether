@@ -1,0 +1,25 @@
+
+
+// EXPECTED_OUTPUT: 3.1415826536
+#include "../std/io.eth"
+
+f64 calculate_pi_leibniz(i64 iterations) {
+    f64 pi_estimate = 0.0;
+    f64 sign = 1.0;
+
+    f64 i_f = 0.0;
+    for (i64 i = 0; i < iterations; i++) {
+        f64 term = sign / (2.0 * i_f + 1.0);
+        pi_estimate = pi_estimate + term;
+        sign = 0.0-sign;
+        i_f = i_f + 1.0;
+    }
+    return 4.0 * pi_estimate;
+}
+
+i32 main() {
+    i64 num_iterations = 1000000;
+    f64 pi_calculated = calculate_pi_leibniz(num_iterations);
+    printf("%.10f\n", pi_calculated);
+    return 0;
+}

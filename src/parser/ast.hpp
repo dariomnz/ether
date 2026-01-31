@@ -9,6 +9,7 @@
 
 namespace ether::parser {
 struct IntegerLiteral;
+struct FloatLiteral;
 struct StringLiteral;
 struct VariableExpression;
 struct FunctionCall;
@@ -37,6 +38,7 @@ struct Program;
 struct ConstASTVisitor {
     virtual ~ConstASTVisitor() = default;
     virtual void visit(const IntegerLiteral& node) = 0;
+    virtual void visit(const FloatLiteral& node) = 0;
     virtual void visit(const StringLiteral& node) = 0;
     virtual void visit(const VariableExpression& node) = 0;
     virtual void visit(const FunctionCall& node) = 0;
@@ -66,6 +68,7 @@ struct ConstASTVisitor {
 struct ASTVisitor {
     virtual ~ASTVisitor() = default;
     virtual void visit(IntegerLiteral& node) = 0;
+    virtual void visit(FloatLiteral& node) = 0;
     virtual void visit(StringLiteral& node) = 0;
     virtual void visit(VariableExpression& node) = 0;
     virtual void visit(FunctionCall& node) = 0;
@@ -95,6 +98,7 @@ struct ASTVisitor {
 struct DefaultIgnoreConstASTVisitor : public ConstASTVisitor {
     virtual ~DefaultIgnoreConstASTVisitor() = default;
     virtual void visit(const IntegerLiteral& node) {};
+    virtual void visit(const FloatLiteral& node) {};
     virtual void visit(const StringLiteral& node) {};
     virtual void visit(const VariableExpression& node) {};
     virtual void visit(const FunctionCall& node) {};
@@ -133,7 +137,7 @@ struct ASTNode {
 };
 
 struct DataType {
-    enum class Kind { I64, I32, I16, I8, Coroutine, Void, Ptr, String, Struct };
+    enum class Kind { I64, I32, I16, I8, F64, F32, Coroutine, Void, Ptr, String, Struct };
     Kind kind;
     std::string struct_name;  // Only for Kind::Struct
     std::shared_ptr<DataType> inner;
@@ -150,6 +154,7 @@ struct DataType {
     }
 
     bool is_integer() const { return kind == Kind::I64 || kind == Kind::I32 || kind == Kind::I16 || kind == Kind::I8; }
+    bool is_float() const { return kind == Kind::F64 || kind == Kind::F32; }
 
     friend std::ostream& operator<<(std::ostream& os, const DataType& type) {
         static const std::unordered_map<Kind, std::string_view> kind_to_str = {
@@ -157,6 +162,8 @@ struct DataType {
             {Kind::I32, "i32"},
             {Kind::I16, "i16"},
             {Kind::I8, "i8"},
+            {Kind::F64, "f64"},
+            {Kind::F32, "f32"},
             {Kind::Coroutine, "coroutine"},
             {Kind::Void, "void"},
             {Kind::Ptr, "ptr"},
@@ -194,6 +201,15 @@ struct IntegerLiteral : Expression {
     int64_t value;
     IntegerLiteral(int64_t val, std::string fn, int l, int c, int len)
         : Expression(std::move(fn), l, c, len), value(val) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ConstASTVisitor& visitor) const override { visitor.visit(*this); }
+};
+
+struct FloatLiteral : Expression {
+    double value;
+    bool is_f32;
+    FloatLiteral(double val, bool f32, std::string fn, int l, int c, int len)
+        : Expression(std::move(fn), l, c, len), value(val), is_f32(f32) {}
     void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
     void accept(ConstASTVisitor& visitor) const override { visitor.visit(*this); }
 };

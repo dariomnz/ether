@@ -1,4 +1,5 @@
 #include "lsp/semantic_tokens.hpp"
+
 #include <iostream>
 
 #include "parser/ast.hpp"
@@ -109,6 +110,7 @@ void SemanticTokensVisitor::visit(const AssignmentExpression &node) {
 }
 
 void SemanticTokensVisitor::visit(const IntegerLiteral &node) {}
+void SemanticTokensVisitor::visit(const FloatLiteral &node) {}
 void SemanticTokensVisitor::visit(const StringLiteral &node) {}
 void SemanticTokensVisitor::visit(const YieldStatement &node) {}
 

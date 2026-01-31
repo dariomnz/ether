@@ -93,6 +93,18 @@ void disassemble(const IRProgram &program) {
                 std::cout << (int)val;
                 break;
             }
+            case OpCode::PUSH_F64: {
+                double val = *(double *)&code[ip];
+                ip += 8;
+                std::cout << val;
+                break;
+            }
+            case OpCode::PUSH_F32: {
+                float val = *(float *)&code[ip];
+                ip += 4;
+                std::cout << val;
+                break;
+            }
             case OpCode::PUSH_STR: {
                 uint32_t id = *(uint32_t *)&code[ip];
                 ip += 4;

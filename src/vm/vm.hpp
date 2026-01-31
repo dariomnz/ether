@@ -14,7 +14,7 @@
 
 namespace ether::vm {
 
-enum class ValueType : uint8_t { I64, I32, I16, I8, String, Ptr };
+enum class ValueType : uint8_t { I64, I32, I16, I8, F64, F32, String, Ptr };
 
 struct Value {
     ValueType type;
@@ -24,6 +24,8 @@ struct Value {
         int32_t i32;
         int16_t i16;
         int8_t i8;
+        double f64;
+        float f32;
         const char* str;  // string_view representation
         void* ptr;        // raw pointer for I/O buffers
     } as;
@@ -33,6 +35,8 @@ struct Value {
     Value(int32_t v) : type(ValueType::I32) { as.i32 = v; }
     Value(int16_t v) : type(ValueType::I16) { as.i16 = v; }
     Value(int8_t v) : type(ValueType::I8) { as.i8 = v; }
+    Value(double v) : type(ValueType::F64) { as.f64 = v; }
+    Value(float v) : type(ValueType::F32) { as.f32 = v; }
     Value(void* v) : type(ValueType::Ptr) { as.ptr = v; }
     Value(std::string_view v) : type(ValueType::String) {
         as.str = v.data();
@@ -51,10 +55,33 @@ struct Value {
                 return as.i16;
             case ValueType::I8:
                 return as.i8;
+            case ValueType::F64:
+                return (int64_t)as.f64;
+            case ValueType::F32:
+                return (int64_t)as.f32;
             case ValueType::Ptr:
                 return (intptr_t)as.ptr;
             default:
                 return 0;
+        }
+    }
+
+    double f64_value() const {
+        switch (type) {
+            case ValueType::I64:
+                return (double)as.i64;
+            case ValueType::I32:
+                return (double)as.i32;
+            case ValueType::I16:
+                return (double)as.i16;
+            case ValueType::I8:
+                return (double)as.i8;
+            case ValueType::F64:
+                return as.f64;
+            case ValueType::F32:
+                return (double)as.f32;
+            default:
+                return 0.0;
         }
     }
 };
@@ -74,6 +101,12 @@ inline std::ostream& operator<<(std::ostream& os, const Value& val) {
             break;
         case ValueType::I8:
             os << (int)val.as.i8;
+            break;
+        case ValueType::F64:
+            os << val.as.f64;
+            break;
+        case ValueType::F32:
+            os << val.as.f32;
             break;
         case ValueType::String:
             os << val.as_string();

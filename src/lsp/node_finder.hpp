@@ -34,6 +34,7 @@ struct NodeFinder : public parser::ConstASTVisitor {
     void visit(const parser::BinaryExpression &node) override;
     void visit(const parser::AssignmentExpression &node) override;
     void visit(const parser::IntegerLiteral &node) override;
+    void visit(const parser::FloatLiteral &node) override;
     void visit(const parser::StringLiteral &node) override;
     void visit(const parser::YieldStatement &node) override;
     void visit(const parser::SpawnExpression &node) override;

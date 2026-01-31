@@ -260,6 +260,11 @@ void NodeFinder::visit(const IntegerLiteral &node) {
     debug_msg("Visiting integer literal at " << node.filename << ":" << node.line << ":" << node.column);
 }
 
+void NodeFinder::visit(const FloatLiteral &node) {
+    if (found || node.filename != target_filename) return;
+    debug_msg("Visiting float literal at " << node.filename << ":" << node.line << ":" << node.column);
+}
+
 void NodeFinder::visit(const StringLiteral &node) {
     if (found || node.filename != target_filename) return;
     debug_msg("Visiting string literal at " << node.filename << ":" << node.line << ":" << node.column);

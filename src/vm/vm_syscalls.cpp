@@ -59,6 +59,17 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
             for (size_t i = 0; i < fmt.size(); ++i) {
                 if (fmt[i] == '%' && i + 1 < fmt.size()) {
                     i++;
+                    int precision = -1;
+                    if (fmt[i] == '.') {
+                        i++;
+                        while (fmt[i] >= '0' && fmt[i] <= '9') {
+                            if (precision == -1) {
+                                precision = 0;
+                            }
+                            precision = precision * 10 + (fmt[i] - '0');
+                            i++;
+                        }
+                    }
                     if (fmt[i] == 'd') {
                         if (arg_idx < args.size() &&
                             (args[arg_idx].type == ValueType::I64 || args[arg_idx].type == ValueType::I32 ||
@@ -66,6 +77,16 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
                             std::cout << args[arg_idx++].i64_value();
                         } else {
                             std::cout << "%d";
+                        }
+                    } else if (fmt[i] == 'f') {
+                        if (arg_idx < args.size() && args[arg_idx].type == ValueType::F64 ||
+                            args[arg_idx].type == ValueType::F32) {
+                            if (precision != -1) {
+                                std::cout << std::fixed << std::setprecision(precision);
+                            }
+                            std::cout << args[arg_idx++].f64_value();
+                        } else {
+                            std::cout << "%f";
                         }
                     } else if (fmt[i] == 's') {
                         if (arg_idx < args.size() && args[arg_idx].type == ValueType::String) {

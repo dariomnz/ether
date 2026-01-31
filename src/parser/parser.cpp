@@ -45,6 +45,10 @@ DataType Parser::parse_type() {
         kind = DataType::Kind::I16;
     else if (match(lexer::TokenType::I8))
         kind = DataType::Kind::I8;
+    else if (match(lexer::TokenType::F64))
+        kind = DataType::Kind::F64;
+    else if (match(lexer::TokenType::F32))
+        kind = DataType::Kind::F32;
     else if (match(lexer::TokenType::Coroutine))
         kind = DataType::Kind::Coroutine;
     else if (match(lexer::TokenType::Ptr))
@@ -367,8 +371,9 @@ std::unique_ptr<Statement> Parser::parse_statement() {
     }
 
     if (check(lexer::TokenType::I64) || check(lexer::TokenType::I32) || check(lexer::TokenType::I16) ||
-        check(lexer::TokenType::I8) || check(lexer::TokenType::Coroutine) || check(lexer::TokenType::Ptr) ||
-        check(lexer::TokenType::Void) || check(lexer::TokenType::String) || check(lexer::TokenType::Struct) ||
+        check(lexer::TokenType::I8) || check(lexer::TokenType::F64) || check(lexer::TokenType::F32) ||
+        check(lexer::TokenType::Coroutine) || check(lexer::TokenType::Ptr) || check(lexer::TokenType::Void) ||
+        check(lexer::TokenType::String) || check(lexer::TokenType::Struct) ||
         (check(lexer::TokenType::Identifier) && m_pos + 1 < m_tokens.size() &&
          m_tokens[m_pos + 1].type == lexer::TokenType::Identifier)) {
         DataType type = parse_type();
@@ -593,6 +598,14 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         const auto &tok = m_tokens[m_pos - 1];
         int64_t val = std::stoll(std::string(tok.lexeme));
         return std::make_unique<IntegerLiteral>(val, m_filename, token.line, token.column, (int)tok.lexeme.size());
+    }
+    if (match(lexer::TokenType::FloatLiteral)) {
+        const auto &tok = m_tokens[m_pos - 1];
+        std::string text = std::string(tok.lexeme);
+        bool is_f32 = text.ends_with('f');
+        double val = std::stod(text);
+        return std::make_unique<FloatLiteral>(val, is_f32, m_filename, token.line, token.column,
+                                              (int)tok.lexeme.size());
     }
     if (match(lexer::TokenType::StringLiteral)) {
         const auto &tok = m_tokens[m_pos - 1];

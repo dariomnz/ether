@@ -116,7 +116,8 @@ void Analyzer::visit(VariableDeclaration &node) {
             bool is_null_ptr = (node.type.kind == DataType::Kind::Ptr && init_type.is_integer());
             bool is_ptr_cast = (node.type.kind == DataType::Kind::Ptr && init_type.kind == DataType::Kind::Ptr);
             bool is_int_conv = (node.type.is_integer() && init_type.is_integer());
-            if (!is_null_ptr && !is_ptr_cast && !is_int_conv) {
+            bool is_float_conv = (node.type.is_float() && init_type.is_float());
+            if (!is_null_ptr && !is_ptr_cast && !is_int_conv && !is_float_conv) {
                 throw CompilerError("Type mismatch in variable declaration: expected " + node.type.to_string() +
                                         ", but got " + init_type.to_string(),
                                     node.filename, node.line, node.column, node.length);
@@ -152,6 +153,15 @@ void Analyzer::visit(IntegerLiteral &node) {
     node.type = std::make_unique<DataType>(m_current_type);
 }
 
+void Analyzer::visit(FloatLiteral &node) {
+    if (node.is_f32) {
+        m_current_type = DataType(DataType::Kind::F32);
+    } else {
+        m_current_type = DataType(DataType::Kind::F64);
+    }
+    node.type = std::make_unique<DataType>(m_current_type);
+}
+
 void Analyzer::visit(StringLiteral &node) {
     m_current_type = DataType(DataType::Kind::String);
     node.type = std::make_unique<DataType>(m_current_type);
@@ -177,14 +187,16 @@ void Analyzer::visit(BinaryExpression &node) {
 
     bool left_ok = left.kind == DataType::Kind::I64 || left.kind == DataType::Kind::I32 ||
                    left.kind == DataType::Kind::I16 || left.kind == DataType::Kind::I8 ||
+                   left.kind == DataType::Kind::F64 || left.kind == DataType::Kind::F32 ||
                    left.kind == DataType::Kind::Ptr;
     bool right_ok = right.kind == DataType::Kind::I64 || right.kind == DataType::Kind::I32 ||
                     right.kind == DataType::Kind::I16 || right.kind == DataType::Kind::I8 ||
+                    right.kind == DataType::Kind::F64 || right.kind == DataType::Kind::F32 ||
                     right.kind == DataType::Kind::Ptr;
 
     if (!left_ok || !right_ok) {
-        throw CompilerError("Binary operations are only supported for integers and pointers", node.filename, node.line,
-                            node.column, node.length);
+        throw CompilerError("Binary operations are only supported for integers, floats, and pointers", node.filename,
+                            node.line, node.column, node.length);
     }
     m_current_type = left;  // For now binary op type is the left type
     node.type = std::make_unique<DataType>(m_current_type);

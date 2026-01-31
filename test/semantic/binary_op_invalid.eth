@@ -1,4 +1,4 @@
-// EXPECTED_OUTPUT: Binary operations are only supported for integers and pointers
+// EXPECTED_OUTPUT: Binary operations are only supported for integers, floats, and pointers
 i32 main() {
     i32 x = 10 + "hello";
     return 0;
