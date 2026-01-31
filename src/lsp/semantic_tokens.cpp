@@ -18,6 +18,9 @@ void SemanticTokensVisitor::highlight_complex_type(const DataType &type, int lin
     } else if (type.kind == DataType::Kind::Coroutine && type.inner) {
         // "coroutine(" -> 10 chars
         highlight_complex_type(*type.inner, line, start_col + 10);
+    } else if (type.kind == DataType::Kind::Array && type.inner) {
+        // "[" -> 1 char, array_size -> size chars, "]" -> 1 char
+        highlight_complex_type(*type.inner, line, start_col + 2 + std::to_string(type.array_size).size());
     }
 }
 

@@ -75,6 +75,15 @@ uint32_t IRGenerator::get_type_size(const parser::DataType &type) {
     uint32_t num_slots = 1;
     if (type.kind == parser::DataType::Kind::Struct) {
         num_slots = m_structs.at(type.struct_name).total_size;
+    } else if (type.kind == parser::DataType::Kind::Array) {
+        if (!type.inner) {
+            throw std::runtime_error("Array type must have an element type");
+        }
+        uint32_t element_size = 1;
+        if (type.inner->kind == parser::DataType::Kind::Struct) {
+            element_size = m_structs.at(type.inner->struct_name).total_size;
+        }
+        num_slots = element_size * type.array_size;
     }
     return num_slots * 16;
 }

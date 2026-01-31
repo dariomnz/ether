@@ -1,0 +1,7 @@
+// EXPECTED_RESULT: 12
+i32 main() {
+    [128]i32 array;
+    array[0] = 123;
+    array[127] = 12;
+    return array[127];
+}

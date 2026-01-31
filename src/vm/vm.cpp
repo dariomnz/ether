@@ -555,7 +555,8 @@ Value VM::run(bool collect_stats) {
                         ptr_addr = (void *)(intptr_t)ptr_val.i64_value();
                     }
 
-                    if (!ptr_addr) throw std::runtime_error("Null pointer dereference");
+                    if (!ptr_addr)
+                        throw std::runtime_error("Null pointer dereference at ip " + std::to_string(CUR_CORO().ip));
                     Value *ptr = (Value *)ptr_addr;
                     for (uint8_t i = 0; i < size; ++i) {
                         push(ptr[offset + i]);
@@ -585,7 +586,8 @@ Value VM::run(bool collect_stats) {
                         ptr_addr = (void *)(intptr_t)ptr_val.i64_value();
                     }
 
-                    if (!ptr_addr) throw std::runtime_error("Null pointer dereference");
+                    if (!ptr_addr)
+                        throw std::runtime_error("Null pointer dereference at ip " + std::to_string(CUR_CORO().ip));
                     Value *ptr = (Value *)ptr_addr;
 
                     for (int i = size - 1; i >= 0; --i) {

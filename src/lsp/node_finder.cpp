@@ -33,6 +33,9 @@ void NodeFinder::check_complex_type(const DataType &type, int type_line, int sta
     } else if (type.kind == DataType::Kind::Coroutine && type.inner) {
         // "coroutine(" -> +10
         check_complex_type(*type.inner, type_line, start_col + 10);
+    } else if (type.kind == DataType::Kind::Array && type.inner) {
+        // "[" -> 1 char, array_size -> size chars, "]" -> 1 char
+        check_complex_type(*type.inner, line, start_col + 2 + std::to_string(type.array_size).size());
     }
 }
 

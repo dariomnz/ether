@@ -36,6 +36,25 @@ bool Parser::match(lexer::TokenType type) {
 }
 
 DataType Parser::parse_type() {
+    // Check for array type syntax: [size]Type
+    if (check(lexer::TokenType::LBracket)) {
+        match(lexer::TokenType::LBracket);
+        if (!check(lexer::TokenType::IntegerLiteral)) {
+            const auto &err_token = peek();
+            throw CompilerError("Expected array size after '['", m_filename, err_token.line, err_token.column,
+                                (int)err_token.lexeme.size());
+        }
+        const auto &size_token = advance();
+        uint32_t array_size = std::stoul(std::string(size_token.lexeme));
+        if (!match(lexer::TokenType::RBracket)) {
+            const auto &err_token = peek();
+            throw CompilerError("Expected ']' after array size", m_filename, err_token.line, err_token.column,
+                                (int)err_token.lexeme.size());
+        }
+        DataType element_type = parse_type();
+        return DataType(DataType::Kind::Array, std::make_shared<DataType>(element_type), array_size);
+    }
+
     DataType::Kind kind;
     if (match(lexer::TokenType::I64))
         kind = DataType::Kind::I64;
@@ -373,7 +392,7 @@ std::unique_ptr<Statement> Parser::parse_statement() {
     if (check(lexer::TokenType::I64) || check(lexer::TokenType::I32) || check(lexer::TokenType::I16) ||
         check(lexer::TokenType::I8) || check(lexer::TokenType::F64) || check(lexer::TokenType::F32) ||
         check(lexer::TokenType::Coroutine) || check(lexer::TokenType::Ptr) || check(lexer::TokenType::Void) ||
-        check(lexer::TokenType::String) || check(lexer::TokenType::Struct) ||
+        check(lexer::TokenType::String) || check(lexer::TokenType::Struct) || check(lexer::TokenType::LBracket) ||
         (check(lexer::TokenType::Identifier) && m_pos + 1 < m_tokens.size() &&
          m_tokens[m_pos + 1].type == lexer::TokenType::Identifier)) {
         DataType type = parse_type();

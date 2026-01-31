@@ -33,10 +33,10 @@ void IRGenerator::visit(const parser::MemberAccessExpression &node) {
 }
 
 void IRGenerator::visit(const parser::IndexExpression &node) {
-    // Load the pointer
+    // Load pointer
     node.object->accept(*this);
 
-    // Load the index
+    // Load index
     node.index->accept(*this);
 
     // The pointer is now at stack[-2] and index at stack[-1]
@@ -45,9 +45,15 @@ void IRGenerator::visit(const parser::IndexExpression &node) {
     // If the inner type is a struct, we need to multiply by its size
 
     uint16_t element_size = 1;
-    if (node.object->type && node.object->type->kind == parser::DataType::Kind::Ptr && node.object->type->inner) {
-        if (node.object->type->inner->kind == parser::DataType::Kind::Struct) {
-            element_size = m_structs.at(node.object->type->inner->struct_name).total_size;
+    if (node.object->type) {
+        if (node.object->type->kind == parser::DataType::Kind::Ptr && node.object->type->inner) {
+            if (node.object->type->inner->kind == parser::DataType::Kind::Struct) {
+                element_size = m_structs.at(node.object->type->inner->struct_name).total_size;
+            }
+        } else if (node.object->type->kind == parser::DataType::Kind::Array && node.object->type->inner) {
+            if (node.object->type->inner->kind == parser::DataType::Kind::Struct) {
+                element_size = m_structs.at(node.object->type->inner->struct_name).total_size;
+            }
         }
     }
 
@@ -55,11 +61,10 @@ void IRGenerator::visit(const parser::IndexExpression &node) {
     emit_push_i32(16 * element_size);  // sizeof(Value)
     emit_mul();
 
-    // Add the byte offset to the pointer
-    // Add the byte offset to the pointer
+    // Add byte offset to pointer
     emit_add();
 
-    // Determine the size of the element being loaded
+    // Determine size of element being loaded
     uint8_t load_size = 1;
     if (node.type && node.type->kind == parser::DataType::Kind::Struct) {
         load_size = m_structs.at(node.type->struct_name).total_size;
@@ -150,6 +155,9 @@ void IRGenerator::visit(const parser::VariableDeclaration &node) {
     if (node.type.kind == parser::DataType::Kind::Struct) {
         size = m_structs.at(node.type.struct_name).total_size;
     }
+    if (node.type.kind == parser::DataType::Kind::Array) {
+        size = get_type_size(node.type) / 16;
+    }
     define_var(node.name, size);
     if (node.init) {
         Symbol s = get_var_symbol(node.name);
@@ -226,33 +234,67 @@ void IRGenerator::visit(const parser::FloatLiteral &node) {
 void IRGenerator::visit(const parser::VariableExpression &node) {
     Symbol s = get_var_symbol(node.name);
 
-    if (s.is_global) {
-        emit_load_global(s.slot, s.size);
+    if (node.type && node.type->kind == parser::DataType::Kind::Array) {
+        if (s.is_global) {
+            emit_lea_global(s.slot);
+        } else {
+            emit_lea_stack(s.slot);
+        }
     } else {
-        emit_load_var(s.slot, s.size);
+        if (s.is_global) {
+            emit_load_global(s.slot, s.size);
+        } else {
+            emit_load_var(s.slot, s.size);
+        }
     }
 }
 
 void IRGenerator::visit(const parser::AssignmentExpression &node) {
-    node.value->accept(*this);  // Push value to store
+    auto *idx_expr = dynamic_cast<const parser::IndexExpression *>(node.lvalue.get());
 
-    LValueResolver resolver;
-    resolver.gen = this;
-    node.lvalue->accept(resolver);
+    if (idx_expr && idx_expr->object->type && idx_expr->object->type->kind == parser::DataType::Kind::Array) {
+        node.value->accept(*this);
 
-    uint8_t size = 1;
-    if (node.lvalue && node.lvalue->type && node.lvalue->type->kind == parser::DataType::Kind::Struct) {
-        size = m_structs.at(node.lvalue->type->struct_name).total_size;
-    }
+        idx_expr->object->accept(*this);
 
-    if (resolver.kind == LValueResolver::Stack) {
-        if (resolver.is_global) {
-            emit_store_global(resolver.slot, size);
-        } else {
-            emit_store_var(resolver.slot, size);
+        idx_expr->index->accept(*this);
+
+        uint16_t element_size = 1;
+        if (idx_expr->object->type->inner && idx_expr->object->type->inner->kind == parser::DataType::Kind::Struct) {
+            element_size = m_structs.at(idx_expr->object->type->inner->struct_name).total_size;
         }
+
+        emit_push_i32(16 * element_size);
+        emit_mul();
+        emit_add();
+
+        uint8_t store_size = 1;
+        if (idx_expr->type && idx_expr->type->kind == parser::DataType::Kind::Struct) {
+            store_size = m_structs.at(idx_expr->type->struct_name).total_size;
+        }
+
+        emit_store_ptr_offset(0, store_size);
     } else {
-        emit_store_ptr_offset(resolver.offset, size);
+        node.value->accept(*this);
+
+        LValueResolver resolver;
+        resolver.gen = this;
+        node.lvalue->accept(resolver);
+
+        uint8_t size = 1;
+        if (node.lvalue && node.lvalue->type && node.lvalue->type->kind == parser::DataType::Kind::Struct) {
+            size = m_structs.at(node.lvalue->type->struct_name).total_size;
+        }
+
+        if (resolver.kind == LValueResolver::Stack) {
+            if (resolver.is_global) {
+                emit_store_global(resolver.slot, size);
+            } else {
+                emit_store_var(resolver.slot, size);
+            }
+        } else {
+            emit_store_ptr_offset(resolver.offset, size);
+        }
     }
 }
 

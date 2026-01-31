@@ -69,7 +69,7 @@ struct IRProgram {
     struct FunctionInfo {
         size_t entry_addr;
         uint8_t num_params;
-        uint8_t num_slots;
+        uint32_t num_slots;
     };
     std::unordered_map<std::string, FunctionInfo> functions;
     std::unordered_map<size_t, FunctionInfo> addr_to_info;  // Fast lookup

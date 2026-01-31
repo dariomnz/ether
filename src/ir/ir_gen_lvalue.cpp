@@ -4,9 +4,20 @@ namespace ether::ir_gen {
 
 void IRGenerator::LValueResolver::visit(const parser::VariableExpression &v) {
     auto s = gen->get_var_symbol(v.name);
-    kind = Stack;
-    slot = s.slot;
-    is_global = s.is_global;
+
+    if (v.type && v.type->kind == parser::DataType::Kind::Array) {
+        kind = Heap;
+        offset = 0;
+        if (s.is_global) {
+            gen->emit_lea_global(s.slot);
+        } else {
+            gen->emit_lea_stack(s.slot);
+        }
+    } else {
+        kind = Stack;
+        slot = s.slot;
+        is_global = s.is_global;
+    }
 }
 
 void IRGenerator::LValueResolver::visit(const parser::MemberAccessExpression &m) {
@@ -44,33 +55,54 @@ void IRGenerator::LValueResolver::visit(const parser::MemberAccessExpression &m)
 }
 
 void IRGenerator::LValueResolver::visit(const parser::IndexExpression &idx) {
-    // Load the pointer
+    // Load pointer
     idx.object->accept(*this);
 
-    // If we're in Stack mode and have a pointer variable, load it
+    // If we're in Stack mode, we need to get the address
     if (kind == Stack) {
-        if (is_global) {
-            gen->emit_load_global(slot, 1);
+        // Check if this is an array (not a pointer variable)
+        bool is_array = idx.object->type && idx.object->type->kind == parser::DataType::Kind::Array;
+
+        if (is_array) {
+            // For arrays, use LEA to get the address
+            if (is_global) {
+                gen->emit_lea_global(slot);
+            } else {
+                gen->emit_lea_stack(slot);
+            }
         } else {
-            gen->emit_load_var(slot, 1);
+            // For pointer variables, load the pointer value
+            if (is_global) {
+                gen->emit_load_global(slot, 1);
+            } else {
+                gen->emit_load_var(slot, 1);
+            }
         }
     } else {
         // Already have a pointer on stack from previous operations
-        gen->emit_load_ptr_offset(offset, 1);
+        // Only load if we have a non-zero offset (nested member access)
+        if (offset != 0) {
+            gen->emit_load_ptr_offset(offset, 1);
+        }
     }
 
-    // Now compute the index offset
+    // Now compute index offset
     idx.index->accept(*gen);
 
     // Multiply by element size if needed
     uint16_t element_size = 1;
-    if (idx.object->type && idx.object->type->kind == parser::DataType::Kind::Ptr && idx.object->type->inner) {
-        if (idx.object->type->inner->kind == parser::DataType::Kind::Struct) {
-            element_size = gen->m_structs.at(idx.object->type->inner->struct_name).total_size;
+    if (idx.object->type) {
+        if (idx.object->type->kind == parser::DataType::Kind::Ptr && idx.object->type->inner) {
+            if (idx.object->type->inner->kind == parser::DataType::Kind::Struct) {
+                element_size = gen->m_structs.at(idx.object->type->inner->struct_name).total_size;
+            }
+        } else if (idx.object->type->kind == parser::DataType::Kind::Array && idx.object->type->inner) {
+            if (idx.object->type->inner->kind == parser::DataType::Kind::Struct) {
+                element_size = gen->m_structs.at(idx.object->type->inner->struct_name).total_size;
+            }
         }
     }
 
-    // Multiply by 16 to convert slot offset to byte offset
     // Multiply by 16 to convert slot offset to byte offset
     gen->emit_push_i32(16 * element_size);  // sizeof(Value)
     gen->emit_mul();
@@ -78,7 +110,7 @@ void IRGenerator::LValueResolver::visit(const parser::IndexExpression &idx) {
     // Add to get final address
     gen->emit_add();
 
-    // Now we're in Heap mode with the computed address on stack
+    // Now we're in Heap mode with computed address on stack
     kind = Heap;
     offset = 0;
 }

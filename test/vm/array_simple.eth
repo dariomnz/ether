@@ -1,0 +1,9 @@
+// EXPECTED_RESULT: 2
+i32 main() {
+    [4]i32 array;
+    array[0] = 1;
+    array[1] = 2;
+    array[2] = 3;
+    array[3] = 4;
+    return array[1];
+}

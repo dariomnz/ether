@@ -109,6 +109,18 @@ void Analyzer::visit(VariableDeclaration &node) {
                                 node.length);
         }
     }
+    if (node.type.kind == DataType::Kind::Array) {
+        if (!node.type.inner) {
+            throw CompilerError("Array type must have an element type", node.filename, node.line, node.column,
+                                node.length);
+        }
+        if (node.type.inner->kind == DataType::Kind::Struct) {
+            if (m_structs.find(node.type.inner->struct_name) == m_structs.end()) {
+                throw CompilerError("Undefined struct: " + node.type.inner->struct_name, node.filename, node.line,
+                                    node.column, node.length);
+            }
+        }
+    }
     if (node.init) {
         node.init->accept(*this);
         DataType init_type = m_current_type;
@@ -428,6 +440,18 @@ void Analyzer::visit(SizeofExpression &node) {
         if (it != m_structs.end()) {
             slots = it->second.total_size;
         }
+    } else if (node.target_type.kind == DataType::Kind::Array) {
+        if (!node.target_type.inner) {
+            throw CompilerError("Array type must have an element type", node.filename, node.line, node.column, node.length);
+        }
+        uint32_t element_slots = 1;
+        if (node.target_type.inner->kind == DataType::Kind::Struct) {
+            auto it = m_structs.find(node.target_type.inner->struct_name);
+            if (it != m_structs.end()) {
+                element_slots = it->second.total_size;
+            }
+        }
+        slots = element_slots * node.target_type.array_size;
     }
     node.calculated_size = slots * 16;
     m_current_type = DataType(DataType::Kind::I32);
@@ -438,13 +462,13 @@ void Analyzer::visit(IndexExpression &node) {
     node.object->accept(*this);
     DataType obj_type = m_current_type;
 
-    // Verify that the object is a pointer
-    if (obj_type.kind != DataType::Kind::Ptr) {
-        throw CompilerError("Index operator '[]' requires a pointer, but got " + obj_type.to_string(), node.filename,
-                            node.line, node.column, node.length);
+    // Verify that object is a pointer or an array
+    if (obj_type.kind != DataType::Kind::Ptr && obj_type.kind != DataType::Kind::Array) {
+        throw CompilerError("Index operator '[]' requires a pointer or array, but got " + obj_type.to_string(),
+                            node.filename, node.line, node.column, node.length);
     }
 
-    // Verify that the index is an integer
+    // Verify that index is an integer
     node.index->accept(*this);
     DataType index_type = m_current_type;
     if (!index_type.is_integer()) {
@@ -452,7 +476,7 @@ void Analyzer::visit(IndexExpression &node) {
                             node.line, node.column, node.length);
     }
 
-    // The result type is the inner type of the pointer
+    // The result type is inner type of pointer or array
     if (obj_type.inner) {
         m_current_type = *obj_type.inner;
     } else {

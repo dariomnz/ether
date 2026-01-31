@@ -137,18 +137,24 @@ struct ASTNode {
 };
 
 struct DataType {
-    enum class Kind { I64, I32, I16, I8, F64, F32, Coroutine, Void, Ptr, String, Struct };
+    enum class Kind { I64, I32, I16, I8, F64, F32, Coroutine, Void, Ptr, String, Struct, Array };
     Kind kind;
     std::string struct_name;  // Only for Kind::Struct
     std::shared_ptr<DataType> inner;
+    uint32_t array_size = 0;  // Only for Kind::Array
 
     DataType() : kind(Kind::I32), inner(nullptr) {}
     explicit DataType(Kind k, std::shared_ptr<DataType> i = nullptr) : kind(k), inner(i) {}
     DataType(Kind k, std::string name) : kind(k), struct_name(std::move(name)), inner(nullptr) {}
+    DataType(Kind k, std::shared_ptr<DataType> i, uint32_t size) : kind(k), inner(i), array_size(size) {}
 
     bool operator==(const DataType& other) const {
         if (kind != other.kind) return false;
         if (kind == Kind::Struct) return struct_name == other.struct_name;
+        if (kind == Kind::Array) {
+            if (!inner || !other.inner) return false;
+            return *inner == *other.inner && array_size == other.array_size;
+        }
         if (inner && other.inner) return *inner == *other.inner;
         return !inner && !other.inner;
     }
@@ -169,6 +175,7 @@ struct DataType {
             {Kind::Ptr, "ptr"},
             {Kind::String, "string"},
             {Kind::Struct, "struct"},
+            {Kind::Array, "array "},
         };
         auto it = kind_to_str.find(type.kind);
         if (it != kind_to_str.end()) {
@@ -176,7 +183,12 @@ struct DataType {
         } else {
             os << "UNKNOWN";
         }
-        if (type.inner) {
+        if (type.kind == Kind::Array) {
+            if (type.inner) {
+                os << *type.inner;
+            }
+            os << "[" << type.array_size << "]";
+        } else if (type.inner) {
             os << "(" << *type.inner << ")";
         }
         return os;
