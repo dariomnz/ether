@@ -1,0 +1,9 @@
+// EXPECTED_OUTPUT: Index must be an integer type
+#include "std/io.eth"
+
+void main() {
+    ptr(i32) arr = malloc(5 * sizeof(i32));
+    f32 idx = 1.0;
+    i32 x = arr[idx];  // Error: index must be integer
+    free(arr);
+}

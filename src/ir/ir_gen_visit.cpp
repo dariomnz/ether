@@ -136,12 +136,33 @@ void IRGenerator::visit(const parser::Block &block) {
 }
 
 void IRGenerator::visit(const parser::ReturnStatement &node) {
-    node.expr->accept(*this);
+    // If we are returning an array that is a direct variable, we need to load its content.
+    // The default visitor for a variable expression of array type is to push its address (LEA).
+    if (node.expr->type && node.expr->type->kind == parser::DataType::Kind::Array) {
+        if (auto* var_expr = dynamic_cast<const parser::VariableExpression*>(node.expr.get())) {
+            Symbol s = get_var_symbol(var_expr->name);
+            uint8_t size = get_type_size(*var_expr->type) / 16;
+            if (s.is_global) {
+                emit_load_global(s.slot, size);
+            } else {
+                emit_load_var(s.slot, size);
+            }
+        } else {
+            node.expr->accept(*this);
+        }
+    } else {
+        node.expr->accept(*this);
+    }
+
     uint8_t size = 1;
-    if (node.expr->type && node.expr->type->kind == parser::DataType::Kind::Struct) {
-        // Ensure struct exists in map
-        if (m_structs.contains(node.expr->type->struct_name)) {
-            size = m_structs.at(node.expr->type->struct_name).total_size;
+    if (node.expr->type) {
+        if (node.expr->type->kind == parser::DataType::Kind::Struct) {
+            // Ensure struct exists in map
+            if (m_structs.contains(node.expr->type->struct_name)) {
+                size = m_structs.at(node.expr->type->struct_name).total_size;
+            }
+        } else if (node.expr->type->kind == parser::DataType::Kind::Array) {
+            size = get_type_size(*node.expr->type) / 16;
         }
     }
     emit_ret(size);
