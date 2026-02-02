@@ -22,6 +22,7 @@ void VM::handle_io_completion() {
             if (coro->id == coro_id) {
                 coro->stack.push_back(Value(res));
                 coro->waiting_for_io = false;
+                coro->pending_args.clear();
                 if (coro->ip == 0xFFFFFFFF) {
                     // It was a spawned native call, mark it as finished
                     coro->result = res;
@@ -120,6 +121,14 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
             return;
         }
 
+        case 16: {  // STRLEN
+            if (args.size() < 2 || args[1].type != ValueType::String) {
+                throw std::runtime_error("strlen requires a string argument");
+            }
+            coro.stack.push_back(Value((int32_t)args[1].str_len));
+            return;
+        }
+
         case 11: {  // MALLOC
             int32_t size = (int32_t)args[1].i64_value();
             void *ptr = malloc(size);
@@ -178,49 +187,53 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
         return;
     }
 
+    coro.pending_args = std::move(args);
+    auto &args_ref = coro.pending_args;
+
     switch (id) {
         case 0: {  // OPEN
-            const char *path = args[2].as.str;
-            int flags = (int)args[3].i64_value();
-            int mode = (int)args[4].i64_value();
+            const char *path = args_ref[2].as.str;
+            int flags = (int)args_ref[3].i64_value();
+            int mode = (int)args_ref[4].i64_value();
             io_uring_prep_openat(sqe, AT_FDCWD, path, flags, mode);
             break;
         }
         case 1: {  // READ
-            int fd = (int)args[1].i64_value();
-            void *buf = args[2].as.ptr;
-            int size = (int)args[3].i64_value();
+            int fd = (int)args_ref[1].i64_value();
+            void *buf = args_ref[2].as.ptr;
+            int size = (int)args_ref[3].i64_value();
             io_uring_prep_read(sqe, fd, buf, size, 0);
             break;
         }
         case 2: {  // WRITE
-            int fd = (int)args[1].i64_value();
-            const char *buf = (args[2].type == ValueType::String) ? args[2].as.str : (const char *)args[2].as.ptr;
-            int size = (int)args[3].i64_value();
+            int fd = (int)args_ref[1].i64_value();
+            const char *buf =
+                (args_ref[2].type == ValueType::String) ? args_ref[2].as.str : (const char *)args_ref[2].as.ptr;
+            int size = (int)args_ref[3].i64_value();
             io_uring_prep_write(sqe, fd, buf, size, 0);
             break;
         }
         case 3: {  // CLOSE
-            int fd = (int)args[1].i64_value();
+            int fd = (int)args_ref[1].i64_value();
             io_uring_prep_close(sqe, fd);
             break;
         }
         case 4: {  // SLEEP
-            int32_t ms = (int32_t)args[1].i64_value();
+            int32_t ms = (int32_t)args_ref[1].i64_value();
             coro.timeout.tv_sec = ms / 1000;
             coro.timeout.tv_nsec = (ms % 1000) * 1000000;
             io_uring_prep_timeout(sqe, &coro.timeout, 0, 0);
             break;
         }
         case 5: {  // ACCEPT
-            int fd = (int)args[1].i64_value();
+            int fd = (int)args_ref[1].i64_value();
             io_uring_prep_accept(sqe, fd, NULL, NULL, 0);
             break;
         }
         case 6: {  // CONNECT
-            int fd = (int)args[1].i64_value();
-            std::string ip_str(args[2].as_string());
-            int port = (int)args[3].i64_value();
+            int fd = (int)args_ref[1].i64_value();
+            std::string ip_str(args_ref[2].as_string());
+            int port = (int)args_ref[3].i64_value();
 
             coro.io_buffer.resize(sizeof(struct sockaddr_in));
             struct sockaddr_in *addr = (struct sockaddr_in *)coro.io_buffer.data();
@@ -233,23 +246,25 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
             break;
         }
         case 7: {  // SEND
-            int fd = (int)args[1].i64_value();
-            const void *buf = (args[2].type == ValueType::String) ? (const void *)args[2].as.str : args[2].as.ptr;
-            int len = (int)args[3].i64_value();
-            int flags = (int)args[4].i64_value();
+            int fd = (int)args_ref[1].i64_value();
+            const void *buf =
+                (args_ref[2].type == ValueType::String) ? (const void *)args_ref[2].as.str : args_ref[2].as.ptr;
+            int len = (int)args_ref[3].i64_value();
+            int flags = (int)args_ref[4].i64_value();
             io_uring_prep_send(sqe, fd, buf, len, flags);
             break;
         }
         case 8: {  // RECV
-            int fd = (int)args[1].i64_value();
-            void *buf = args[2].as.ptr;
-            int len = (int)args[3].i64_value();
-            int flags = (int)args[4].i64_value();
+            int fd = (int)args_ref[1].i64_value();
+            void *buf = args_ref[2].as.ptr;
+            int len = (int)args_ref[3].i64_value();
+            int flags = (int)args_ref[4].i64_value();
             io_uring_prep_recv(sqe, fd, buf, len, flags);
             break;
         }
         default:
             coro.stack.push_back(Value(-2));
+            coro.pending_args.clear();
             return;
     }
 

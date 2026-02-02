@@ -1,5 +1,10 @@
 // EXPECTED_OUTPUT: Binary string operations only support '+' with two strings
+#include "std/io.eth"
+
 i32 main() {
-    i32 x = 10 + "hello";
+    string s = "hi";
+    i32 x = 1;
+    string y = s + x;
+    printf("%s\n", y);
     return 0;
 }

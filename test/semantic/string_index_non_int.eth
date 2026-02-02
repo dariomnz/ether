@@ -1,0 +1,10 @@
+// EXPECTED_OUTPUT: Index must be an integer type, but got f32
+#include "std/io.eth"
+
+i32 main() {
+    string s = "hi";
+    f32 idx = 1.0;
+    i8 c = s[idx];
+    printf("%d\n", c);
+    return 0;
+}

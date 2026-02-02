@@ -111,6 +111,10 @@ void disassemble(const IRProgram &program) {
                 printLiteral(program.string_pool[id]);
                 break;
             }
+            case OpCode::STR_GET:
+            case OpCode::STR_SET: {
+                break;
+            }
             case OpCode::STORE_VAR:
             case OpCode::LOAD_VAR: {
                 uint16_t slot = *(uint16_t *)&code[ip];

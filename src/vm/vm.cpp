@@ -1,5 +1,7 @@
 #include "vm.hpp"
 
+#include <cstring>
+#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 
@@ -7,6 +9,32 @@
 #include "common/debug.hpp"
 
 namespace ether::vm {
+
+static Value make_string_value(std::string_view view) {
+    Value res;
+    res.type = ValueType::String;
+    res.as.str = alloc_string_data(view);
+    res.str_len = static_cast<uint32_t>(view.size());
+    return res;
+}
+
+static Value concat_strings(const Value &a, const Value &b) {
+    std::string_view av = a.as_string();
+    std::string_view bv = b.as_string();
+    size_t total = av.size() + bv.size();
+    Value res;
+    res.type = ValueType::String;
+    res.as.str = alloc_string_data_len(total);
+    char *buf = res.as.str;
+    if (!av.empty()) {
+        std::memcpy(buf, av.data(), av.size());
+    }
+    if (!bv.empty()) {
+        std::memcpy(buf + av.size(), bv.data(), bv.size());
+    }
+    res.str_len = static_cast<uint32_t>(total);
+    return res;
+}
 
 VM::VM(const ir::IRProgram &program) : program_(program) {
     m_globals.resize(program.num_globals, Value(0));
@@ -59,7 +87,6 @@ Value VM::run(bool collect_stats) {
             if (!found_waiter) {
                 m_finished_coros[finished_id] = res;
             }
-
             m_coroutines.erase(m_coroutines.begin() + m_current_coro);
             if (m_coroutines.empty()) break;
             continue;
@@ -68,7 +95,8 @@ Value VM::run(bool collect_stats) {
         if (m_coroutines[m_current_coro]->waiting_for_id != -1) {
             uint32_t target_id = (uint32_t)m_coroutines[m_current_coro]->waiting_for_id;
             if (m_finished_coros.contains(target_id)) {
-                m_coroutines[m_current_coro]->stack.push_back(m_finished_coros[target_id]);
+                Value res = m_finished_coros[target_id];
+                m_coroutines[m_current_coro]->stack.push_back(res);
                 m_coroutines[m_current_coro]->waiting_for_id = -1;
                 m_finished_coros.erase(target_id);
             } else {
@@ -175,7 +203,38 @@ Value VM::run(bool collect_stats) {
 
                 case ir::OpCode::PUSH_STR: {
                     uint32_t string_id = READ_UINT32();
-                    push(Value(std::string_view(program.string_pool[string_id])));
+                    push(make_string_value(std::string_view(program.string_pool[string_id])));
+                    break;
+                }
+
+                case ir::OpCode::STR_GET: {
+                    Value idx_val = pop();
+                    Value str_val = pop();
+                    if (str_val.type != ValueType::String) {
+                        throw std::runtime_error("STR_GET expects string value");
+                    }
+                    int64_t idx = idx_val.i64_value();
+                    if (idx < 0 || static_cast<uint64_t>(idx) >= str_val.str_len) {
+                        throw std::runtime_error("String index out of bounds");
+                    }
+                    char c = str_val.as.str[idx];
+                    push(Value((int8_t)c));
+                    break;
+                }
+
+                case ir::OpCode::STR_SET: {
+                    Value idx_val = pop();
+                    Value str_val = pop();
+                    Value char_val = pop();
+                    if (str_val.type != ValueType::String) {
+                        throw std::runtime_error("STR_SET expects string value");
+                    }
+                    int64_t idx = idx_val.i64_value();
+                    if (idx < 0 || static_cast<uint64_t>(idx) >= str_val.str_len) {
+                        throw std::runtime_error("String index out of bounds");
+                    }
+                    char c = (char)char_val.i64_value();
+                    str_val.as.str[idx] = c;
                     break;
                 }
 
@@ -220,15 +279,24 @@ Value VM::run(bool collect_stats) {
                     auto &call_stack = CUR_CORO().call_stack;
                     size_t base = call_stack.back().stack_base + slot;
                     for (uint8_t i = 0; i < size; ++i) {
-                        stack.push_back(stack[base + i]);
+                        push(stack[base + i]);
                     }
                     break;
                 }
 
                 case ir::OpCode::ADD: {
-                    int64_t b = pop().i64_value();
-                    int64_t a = pop().i64_value();
-                    push(Value(a + b));
+                    Value b = pop();
+                    Value a = pop();
+                    if (a.type == ValueType::String && b.type == ValueType::String) {
+                        Value res = concat_strings(a, b);
+                        push(res);
+                    } else if (a.type == ValueType::String || b.type == ValueType::String) {
+                        throw std::runtime_error("Cannot add string with non-string");
+                    } else {
+                        int64_t bv = b.i64_value();
+                        int64_t av = a.i64_value();
+                        push(Value(av + bv));
+                    }
                     break;
                 }
 
@@ -372,7 +440,7 @@ Value VM::run(bool collect_stats) {
                         CUR_CORO().ip = ret_addr;
                         // Push results back
                         for (const auto &val : results) {
-                            stack.push_back(val);
+                            push(val);
                         }
                     }
                     break;
@@ -613,7 +681,7 @@ Value VM::run(bool collect_stats) {
                     auto &stack = CUR_CORO().stack;
                     uint8_t num_varargs = frame.num_args_passed - frame.num_fixed_params;
                     for (uint8_t i = 0; i < num_varargs; ++i) {
-                        stack.push_back(stack[frame.stack_base + frame.num_fixed_params + i]);
+                        push(stack[frame.stack_base + frame.num_fixed_params + i]);
                     }
                     break;
                 }

@@ -197,6 +197,17 @@ void Analyzer::visit(BinaryExpression &node) {
     node.right->accept(*this);
     DataType right = m_current_type;
 
+    if (left.kind == DataType::Kind::String || right.kind == DataType::Kind::String) {
+        if (left.kind == DataType::Kind::String && right.kind == DataType::Kind::String &&
+            node.op == BinaryExpression::Op::Add) {
+            m_current_type = DataType(DataType::Kind::String);
+            node.type = std::make_unique<DataType>(m_current_type);
+            return;
+        }
+        throw CompilerError("Binary string operations only support '+' with two strings", node.filename, node.line,
+                            node.column, node.length);
+    }
+
     bool left_ok = left.kind == DataType::Kind::I64 || left.kind == DataType::Kind::I32 ||
                    left.kind == DataType::Kind::I16 || left.kind == DataType::Kind::I8 ||
                    left.kind == DataType::Kind::F64 || left.kind == DataType::Kind::F32 ||
@@ -463,7 +474,8 @@ void Analyzer::visit(IndexExpression &node) {
     DataType obj_type = m_current_type;
 
     // Verify that object is a pointer or an array
-    if (obj_type.kind != DataType::Kind::Ptr && obj_type.kind != DataType::Kind::Array) {
+    if (obj_type.kind != DataType::Kind::Ptr && obj_type.kind != DataType::Kind::Array &&
+        obj_type.kind != DataType::Kind::String) {
         throw CompilerError("Index operator '[]' requires a pointer or array, but got " + obj_type.to_string(),
                             node.filename, node.line, node.column, node.length);
     }
@@ -477,7 +489,9 @@ void Analyzer::visit(IndexExpression &node) {
     }
 
     // The result type is inner type of pointer or array
-    if (obj_type.inner) {
+    if (obj_type.kind == DataType::Kind::String) {
+        m_current_type = DataType(DataType::Kind::I8);
+    } else if (obj_type.inner) {
         m_current_type = *obj_type.inner;
     } else {
         // Fallback to i32 if no inner type specified

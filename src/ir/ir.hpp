@@ -35,6 +35,8 @@ enum class OpCode : uint8_t {
     RET,               // [uint8_t opcode] [uint8_t size] (2 byte)
     HALT,              // [uint8_t opcode] (1 byte)
     PUSH_STR,          // [uint8_t opcode] [uint32_t string_id] (5 bytes)
+    STR_GET,           // [uint8_t opcode] (1 byte) -- pops (string, index) -> pushes i8
+    STR_SET,           // [uint8_t opcode] (1 byte) -- pops (value, string, index), mutates
     SYSCALL,           // [uint8_t opcode] [uint8_t num_args] (2 bytes)
     CALL,              // [uint8_t opcode] [uint32_t target_addr] [uint8_t num_args] (6 bytes)
     JMP,               // [uint8_t opcode] [uint32_t target_addr] (5 bytes)

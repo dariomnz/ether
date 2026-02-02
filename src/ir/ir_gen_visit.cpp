@@ -33,6 +33,13 @@ void IRGenerator::visit(const parser::MemberAccessExpression &node) {
 }
 
 void IRGenerator::visit(const parser::IndexExpression &node) {
+    if (node.object->type && node.object->type->kind == parser::DataType::Kind::String) {
+        node.object->accept(*this);
+        node.index->accept(*this);
+        emit_str_get();
+        return;
+    }
+
     // Load pointer
     node.object->accept(*this);
 
@@ -273,7 +280,12 @@ void IRGenerator::visit(const parser::VariableExpression &node) {
 void IRGenerator::visit(const parser::AssignmentExpression &node) {
     auto *idx_expr = dynamic_cast<const parser::IndexExpression *>(node.lvalue.get());
 
-    if (idx_expr && idx_expr->object->type && idx_expr->object->type->kind == parser::DataType::Kind::Array) {
+    if (idx_expr && idx_expr->object->type && idx_expr->object->type->kind == parser::DataType::Kind::String) {
+        node.value->accept(*this);
+        idx_expr->object->accept(*this);
+        idx_expr->index->accept(*this);
+        emit_str_set();
+    } else if (idx_expr && idx_expr->object->type && idx_expr->object->type->kind == parser::DataType::Kind::Array) {
         node.value->accept(*this);
 
         idx_expr->object->accept(*this);

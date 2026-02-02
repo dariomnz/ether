@@ -148,6 +148,43 @@ Token Lexer::next_token() {
         }
     }
 
+    if (c == '\'') {
+        advance();  // skip opening '
+        char value = '\0';
+        if (peek() == '\\') {
+            advance();  // skip '\'
+            char escaped = advance();
+            switch (escaped) {
+                case 'n':
+                    value = '\n';
+                    break;
+                case 't':
+                    value = '\t';
+                    break;
+                case 'r':
+                    value = '\r';
+                    break;
+                case '\\':
+                    value = '\\';
+                    break;
+                case '\'':
+                    value = '\'';
+                    break;
+                default:
+                    value = escaped;
+                    break;
+            }
+        } else {
+            value = advance();
+        }
+        if (peek() == '\'') {
+            advance();  // skip closing '
+            return {TokenType::IntegerLiteral, std::to_string((int)value), start_line, start_col};
+        } else {
+            throw CompilerError("Unterminated char literal", m_filename, start_line, start_col);
+        }
+    }
+
     advance();
     std::string lexeme(m_source.substr(m_pos - 1, 1));
 

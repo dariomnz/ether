@@ -4,8 +4,12 @@
 #include <liburing.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <memory>
+#include <stdexcept>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -15,6 +19,50 @@
 namespace ether::vm {
 
 enum class ValueType : uint8_t { I64, I32, I16, I8, F64, F32, String, Ptr };
+
+struct StringObj {
+    uint32_t ref_count;
+    uint32_t len;
+    char data[1];
+};
+
+inline StringObj* string_obj_from_data(char* data) {
+    return (StringObj*)((uint8_t*)data - offsetof(StringObj, data));
+}
+
+inline char* alloc_string_data_len(size_t len) {
+    size_t total = sizeof(StringObj) + len;
+    auto *obj = (StringObj*)malloc(total);
+    if (!obj) {
+        throw std::runtime_error("Out of memory while allocating string");
+    }
+    obj->ref_count = 1;
+    obj->len = static_cast<uint32_t>(len);
+    obj->data[len] = '\0';
+    return obj->data;
+}
+
+inline char* alloc_string_data(std::string_view v) {
+    char* data = alloc_string_data_len(v.size());
+    if (!v.empty()) {
+        std::memcpy(data, v.data(), v.size());
+    }
+    return data;
+}
+
+inline void retain_string_data(char* data) {
+    if (!data) return;
+    auto *obj = string_obj_from_data(data);
+    obj->ref_count += 1;
+}
+
+inline void release_string_data(char* data) {
+    if (!data) return;
+    auto *obj = string_obj_from_data(data);
+    if (--obj->ref_count == 0) {
+        free(obj);
+    }
+}
 
 struct Value {
     ValueType type;
@@ -26,8 +74,8 @@ struct Value {
         int8_t i8;
         double f64;
         float f32;
-        const char* str;  // string_view representation
-        void* ptr;        // raw pointer for I/O buffers
+        char* str;  // string_view representation
+        void* ptr;  // raw pointer for I/O buffers
     } as;
 
     Value() : type(ValueType::I32) { as.i32 = 0; }
@@ -39,8 +87,56 @@ struct Value {
     Value(float v) : type(ValueType::F32) { as.f32 = v; }
     Value(void* v) : type(ValueType::Ptr) { as.ptr = v; }
     Value(std::string_view v) : type(ValueType::String) {
-        as.str = v.data();
+        as.str = alloc_string_data(v);
         str_len = static_cast<uint32_t>(v.size());
+    }
+
+    Value(const Value& other) : type(other.type), str_len(other.str_len) {
+        as = other.as;
+        if (type == ValueType::String) {
+            retain_string_data(as.str);
+        }
+    }
+
+    Value(Value&& other) noexcept : type(other.type), str_len(other.str_len) {
+        as = other.as;
+        other.type = ValueType::I32;
+        other.as.i32 = 0;
+        other.str_len = 0;
+    }
+
+    Value& operator=(const Value& other) {
+        if (this == &other) return *this;
+        if (type == ValueType::String) {
+            release_string_data(as.str);
+        }
+        type = other.type;
+        str_len = other.str_len;
+        as = other.as;
+        if (type == ValueType::String) {
+            retain_string_data(as.str);
+        }
+        return *this;
+    }
+
+    Value& operator=(Value&& other) noexcept {
+        if (this == &other) return *this;
+        if (type == ValueType::String) {
+            release_string_data(as.str);
+        }
+        type = other.type;
+        str_len = other.str_len;
+        as = other.as;
+        other.type = ValueType::I32;
+        other.as.i32 = 0;
+        other.str_len = 0;
+        return *this;
+    }
+
+    ~Value() {
+        if (type == ValueType::String) {
+            release_string_data(as.str);
+        }
     }
 
     std::string_view as_string() const { return std::string_view(as.str, str_len); }
@@ -139,6 +235,7 @@ struct Coroutine {
     size_t ip;
     Value result;
     std::vector<uint8_t> io_buffer;  // For holding temporary data (like sockaddr) during async I/O
+    std::vector<Value> pending_args;  // Keep syscall args alive until async completes
     struct __kernel_timespec timeout;
     bool finished = false;
 
@@ -179,7 +276,7 @@ class VM {
     void handle_io_completion();
     void submit_syscall(Coroutine& coro, uint8_t num_args);
 
-    inline void push(Value val) { m_coroutines[m_current_coro]->stack.push_back(val); }
+    inline void push(Value val) { m_coroutines[m_current_coro]->stack.push_back(std::move(val)); }
     inline Value pop() {
         auto& coro = m_coroutines[m_current_coro];
         Value val = coro->stack.back();

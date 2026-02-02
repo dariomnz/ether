@@ -1,0 +1,9 @@
+// EXPECTED_OUTPUT: 5
+// EXPECTED_OUTPUT: 0
+#include "std/io.eth"
+
+i32 main() {
+    printf("%d\n", strlen("Hello"));
+    printf("%d\n", strlen(""));
+    return 0;
+}

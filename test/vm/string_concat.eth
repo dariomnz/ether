@@ -1,0 +1,11 @@
+// EXPECTED_OUTPUT: HelloWorld
+// EXPECTED_OUTPUT: Hello World
+#include "std/io.eth"
+
+i32 main() {
+    string a = "Hello";
+    string b = "World";
+    printf("%s\n", a + b);
+    printf("%s\n", a + " " + b);
+    return 0;
+}

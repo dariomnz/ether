@@ -1,0 +1,12 @@
+// EXPECTED_OUTPUT: 97
+// EXPECTED_OUTPUT: hbc
+#include "std/io.eth"
+
+i32 main() {
+    string s = "abc";
+    i8 c = s[0];
+    printf("%d\n", c);
+    s[0] = 'h';
+    printf("%s\n", s);
+    return 0;
+}

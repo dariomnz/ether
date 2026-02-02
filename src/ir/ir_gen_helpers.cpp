@@ -127,6 +127,10 @@ void IRGenerator::emit_push_str(uint32_t id) {
     emit_uint32(id);
 }
 
+void IRGenerator::emit_str_get() { emit_opcode(ir::OpCode::STR_GET); }
+
+void IRGenerator::emit_str_set() { emit_opcode(ir::OpCode::STR_SET); }
+
 void IRGenerator::emit_load_var(uint16_t slot, uint8_t size) {
     emit_opcode(ir::OpCode::LOAD_VAR);
     emit_uint16(slot);
