@@ -4,20 +4,9 @@ namespace ether::ir_gen {
 
 void IRGenerator::LValueResolver::visit(const parser::VariableExpression &v) {
     auto s = gen->get_var_symbol(v.name);
-
-    if (v.type && v.type->kind == parser::DataType::Kind::Array) {
-        kind = Heap;
-        offset = 0;
-        if (s.is_global) {
-            gen->emit_lea_global(s.slot);
-        } else {
-            gen->emit_lea_stack(s.slot);
-        }
-    } else {
-        kind = Stack;
-        slot = s.slot;
-        is_global = s.is_global;
-    }
+    kind = Stack;
+    slot = s.slot;
+    is_global = s.is_global;
 }
 
 void IRGenerator::LValueResolver::visit(const parser::MemberAccessExpression &m) {
@@ -60,23 +49,11 @@ void IRGenerator::LValueResolver::visit(const parser::IndexExpression &idx) {
 
     // If we're in Stack mode, we need to get the address
     if (kind == Stack) {
-        // Check if this is an array (not a pointer variable)
-        bool is_array = idx.object->type && idx.object->type->kind == parser::DataType::Kind::Array;
-
-        if (is_array) {
-            // For arrays, use LEA to get the address
-            if (is_global) {
-                gen->emit_lea_global(slot);
-            } else {
-                gen->emit_lea_stack(slot);
-            }
+        // Load the pointer value (arrays are pointer-like)
+        if (is_global) {
+            gen->emit_load_global(slot, 1);
         } else {
-            // For pointer variables, load the pointer value
-            if (is_global) {
-                gen->emit_load_global(slot, 1);
-            } else {
-                gen->emit_load_var(slot, 1);
-            }
+            gen->emit_load_var(slot, 1);
         }
     } else {
         // Already have a pointer on stack from previous operations

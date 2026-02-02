@@ -125,26 +125,7 @@ void VM::submit_syscall(Coroutine &coro, uint8_t num_args) {
             if (args.size() < 2 || args[1].type != ValueType::String) {
                 throw std::runtime_error("strlen requires a string argument");
             }
-            coro.stack.push_back(Value((int32_t)args[1].str_len));
-            return;
-        }
-
-        case 11: {  // MALLOC
-            int32_t size = (int32_t)args[1].i64_value();
-            void *ptr = malloc(size);
-            Value res;
-            res.type = ValueType::Ptr;
-            res.as.ptr = ptr;
-            coro.stack.push_back(res);
-            return;
-        }
-
-        case 12: {  // FREE
-            Value ptr_val = args[1];
-            if (ptr_val.type == ValueType::Ptr) {
-                free(ptr_val.as.ptr);
-            }
-            coro.stack.push_back(Value(0));
+            coro.stack.push_back(Value((int32_t)args[1].len));
             return;
         }
 

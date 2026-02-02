@@ -2,7 +2,7 @@
 #include "std/io.eth"
 
 void main() {
-    ptr(i32) numbers = malloc(5 * sizeof(i32));
+    [5]i32 numbers;
     
     // Initialize with a loop
     for (i32 i = 0; i < 5; i++) {
@@ -16,6 +16,4 @@ void main() {
     }
     
     printf("Sum: %d\n", sum);
-    
-    free(numbers);
 }

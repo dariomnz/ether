@@ -169,25 +169,27 @@ void IRGenerator::visit(const parser::ReturnStatement &node) {
                 size = m_structs.at(node.expr->type->struct_name).total_size;
             }
         } else if (node.expr->type->kind == parser::DataType::Kind::Array) {
-            size = get_type_size(*node.expr->type) / 16;
+            size = 1;
         }
     }
     emit_ret(size);
 }
 
 void IRGenerator::visit(const parser::VariableDeclaration &node) {
-    if (node.init) {
-        node.init->accept(*this);
-    }
     uint16_t size = 1;
     if (node.type.kind == parser::DataType::Kind::Struct) {
         size = m_structs.at(node.type.struct_name).total_size;
     }
-    if (node.type.kind == parser::DataType::Kind::Array) {
-        size = get_type_size(node.type) / 16;
-    }
     define_var(node.name, size);
+
     if (node.init) {
+        node.init->accept(*this);
+    } else if (node.type.kind == parser::DataType::Kind::Array) {
+        uint32_t slots = (uint32_t)(get_type_size(node.type) / 16);
+        emit_arr_alloc(slots);
+    }
+
+    if (node.init || node.type.kind == parser::DataType::Kind::Array) {
         Symbol s = get_var_symbol(node.name);
         if (s.is_global) {
             emit_store_global(s.slot, s.size);
@@ -262,18 +264,10 @@ void IRGenerator::visit(const parser::FloatLiteral &node) {
 void IRGenerator::visit(const parser::VariableExpression &node) {
     Symbol s = get_var_symbol(node.name);
 
-    if (node.type && node.type->kind == parser::DataType::Kind::Array) {
-        if (s.is_global) {
-            emit_lea_global(s.slot);
-        } else {
-            emit_lea_stack(s.slot);
-        }
+    if (s.is_global) {
+        emit_load_global(s.slot, s.size);
     } else {
-        if (s.is_global) {
-            emit_load_global(s.slot, s.size);
-        } else {
-            emit_load_var(s.slot, s.size);
-        }
+        emit_load_var(s.slot, s.size);
     }
 }
 

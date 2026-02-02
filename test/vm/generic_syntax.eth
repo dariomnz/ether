@@ -14,9 +14,10 @@ i32 main() {
     i32 res = await c1;
     printf("Result: %d\n", res); // EXPECTED_OUTPUT: Result: 42
 
-    // Test 2: ptr(i32)
-    ptr(i32) p = malloc(4);
-    free(p);
+    // Test 2: array syntax
+    [2]i32 p;
+    p[0] = 1;
+    p[1] = 2;
     
     // Test 3: nested generics (syntax check)
     // coroutine(ptr(i32)) c2; // Not fully supported yet by VM but syntax should work

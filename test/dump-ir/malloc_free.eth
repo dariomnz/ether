@@ -1,15 +1,12 @@
 // ARGS: --dump-ir
 // EXPECTED_OUTPUT: <function: main> (params: 0, slots: 1)
-// EXPECTED_OUTPUT: PUSH_I32            16
-// EXPECTED_OUTPUT: CALL                addr 25 args 1 <malloc>
-// EXPECTED_OUTPUT: STORE_VAR           slot 0
-// EXPECTED_OUTPUT: LOAD_VAR            slot 0
-// EXPECTED_OUTPUT: CALL                addr 37 args 1 <free>
+// EXPECTED_OUTPUT: ARR_ALLOC
+// EXPECTED_OUTPUT: STORE_VAR
+// EXPECTED_OUTPUT: PUSH_I32            0
+// EXPECTED_OUTPUT: RET
 #include "std/io.eth"
 
 i32 main() {
-    ptr(i32) p = malloc(16);
-    // Array access [] not supported yet, just testing valid malloc/free IR
-    free(p);
+    [4]i32 p;
     return 0;
 }

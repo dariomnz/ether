@@ -1,7 +1,7 @@
 #include "vm.hpp"
 
-#include <cstring>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 
@@ -14,7 +14,7 @@ static Value make_string_value(std::string_view view) {
     Value res;
     res.type = ValueType::String;
     res.as.str = alloc_string_data(view);
-    res.str_len = static_cast<uint32_t>(view.size());
+    res.len = static_cast<uint32_t>(view.size());
     return res;
 }
 
@@ -32,7 +32,7 @@ static Value concat_strings(const Value &a, const Value &b) {
     if (!bv.empty()) {
         std::memcpy(buf + av.size(), bv.data(), bv.size());
     }
-    res.str_len = static_cast<uint32_t>(total);
+    res.len = static_cast<uint32_t>(total);
     return res;
 }
 
@@ -214,7 +214,7 @@ Value VM::run(bool collect_stats) {
                         throw std::runtime_error("STR_GET expects string value");
                     }
                     int64_t idx = idx_val.i64_value();
-                    if (idx < 0 || static_cast<uint64_t>(idx) >= str_val.str_len) {
+                    if (idx < 0 || static_cast<uint64_t>(idx) >= str_val.len) {
                         throw std::runtime_error("String index out of bounds");
                     }
                     char c = str_val.as.str[idx];
@@ -230,11 +230,18 @@ Value VM::run(bool collect_stats) {
                         throw std::runtime_error("STR_SET expects string value");
                     }
                     int64_t idx = idx_val.i64_value();
-                    if (idx < 0 || static_cast<uint64_t>(idx) >= str_val.str_len) {
+                    if (idx < 0 || static_cast<uint64_t>(idx) >= str_val.len) {
                         throw std::runtime_error("String index out of bounds");
                     }
                     char c = (char)char_val.i64_value();
                     str_val.as.str[idx] = c;
+                    break;
+                }
+
+                case ir::OpCode::ARR_ALLOC: {
+                    uint32_t slots = READ_UINT32();
+                    Value *data = alloc_array_data(slots);
+                    push(Value::make_array(data, slots));
                     break;
                 }
 
@@ -618,6 +625,8 @@ Value VM::run(bool collect_stats) {
                     // Handle both Ptr and I64 types (for pointer arithmetic)
                     if (ptr_val.type == ValueType::Ptr) {
                         ptr_addr = ptr_val.as.ptr;
+                    } else if (ptr_val.type == ValueType::Array) {
+                        ptr_addr = ptr_val.as.arr;
                     } else {
                         // Treat i64 as pointer address
                         ptr_addr = (void *)(intptr_t)ptr_val.i64_value();
@@ -649,6 +658,8 @@ Value VM::run(bool collect_stats) {
                     // Handle both Ptr and I64 types (for pointer arithmetic)
                     if (ptr_val.type == ValueType::Ptr) {
                         ptr_addr = ptr_val.as.ptr;
+                    } else if (ptr_val.type == ValueType::Array) {
+                        ptr_addr = ptr_val.as.arr;
                     } else {
                         // Treat i64 as pointer address
                         ptr_addr = (void *)(intptr_t)ptr_val.i64_value();

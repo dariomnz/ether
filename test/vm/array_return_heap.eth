@@ -1,9 +1,8 @@
 // EXPECTED_OUTPUT: Values: 10, 20, 30
 #include "std/io.eth"
 
-// Function that creates and returns a pointer to a heap-allocated array
-ptr(i32) create_array() {
-    ptr(i32) arr = malloc(3 * sizeof(i32));
+[3]i32 create_array() {
+    [3]i32 arr;
     arr[0] = 10;
     arr[1] = 20;
     arr[2] = 30;
@@ -11,15 +10,12 @@ ptr(i32) create_array() {
 }
 
 i32 main() {
-    ptr(i32) my_arr = create_array();
+    [3]i32 my_arr = create_array();
     
     i32 val0 = my_arr[0];
     i32 val1 = my_arr[1];
     i32 val2 = my_arr[2];
 
     printf("Values: %d, %d, %d\n", val0, val1, val2);
-
-    free(my_arr);
     return 0;
 }
-

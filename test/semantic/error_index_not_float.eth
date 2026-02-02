@@ -2,8 +2,7 @@
 #include "std/io.eth"
 
 void main() {
-    ptr(i32) arr = malloc(5 * sizeof(i32));
-    f32 idx = 1.0;
+    [5]i32 arr;
+    f64 idx = 1.5;
     i32 x = arr[idx];  // Error: index must be integer
-    free(arr);
 }

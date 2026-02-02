@@ -25,6 +25,7 @@ std::ostream &operator<<(std::ostream &os, OpCode op) {
         {OpCode::PUSH_STR, "PUSH_STR"},
         {OpCode::STR_GET, "STR_GET"},
         {OpCode::STR_SET, "STR_SET"},
+        {OpCode::ARR_ALLOC, "ARR_ALLOC"},
         {OpCode::SYSCALL, "SYSCALL"},
         {OpCode::CALL, "CALL"},
         {OpCode::JMP, "JMP"},

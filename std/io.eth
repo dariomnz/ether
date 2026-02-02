@@ -8,8 +8,6 @@ i32 SYS_CONNECT = 6;
 i32 SYS_SEND = 7;
 i32 SYS_RECV = 8;
 i32 SYS_PRINTF = 10;
-i32 SYS_MALLOC = 11;
-i32 SYS_FREE = 12;
 i32 SYS_SOCKET = 13;
 i32 SYS_BIND = 14;
 i32 SYS_LISTEN = 15;
@@ -65,14 +63,6 @@ i32 printf(string fmt, ...) {
 
 i32 strlen(string s) {
     return syscall(SYS_STRLEN, s);
-}
-
-ptr malloc(i32 size) {
-    return syscall(SYS_MALLOC, size);
-}
-
-i32 free(ptr p) {
-    return syscall(SYS_FREE, p);
 }
 
 i32 socket(i32 domain, i32 type, i32 protocol) {

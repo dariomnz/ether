@@ -8,17 +8,15 @@ struct Point {
 }
 
 void main() {
-    ptr(Point) p = malloc(sizeof(Point));
+    [1]Point p;
     
-    p.x = 42;
-    p.y = 84;
+    p[0].x = 42;
+    p[0].y = 84;
     
-    printf("Heap Point: %d, %d\n", p.x, p.y);
+    printf("Heap Point: %d, %d\n", p[0].x, p[0].y);
     
-    p.x--;
-    p.y = p.y / 2;
+    p[0].x--;
+    p[0].y = p[0].y / 2;
     
-    printf("Updated Heap Point: %d, %d\n", p.x, p.y);
-    
-    free(p);
+    printf("Updated Heap Point: %d, %d\n", p[0].x, p[0].y);
 }

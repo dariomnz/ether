@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <string_view>
 #include <unordered_map>
@@ -18,7 +19,9 @@
 
 namespace ether::vm {
 
-enum class ValueType : uint8_t { I64, I32, I16, I8, F64, F32, String, Ptr };
+enum class ValueType : uint8_t { I64, I32, I16, I8, F64, F32, String, Array, Ptr };
+
+struct Value;
 
 struct StringObj {
     uint32_t ref_count;
@@ -26,13 +29,11 @@ struct StringObj {
     char data[1];
 };
 
-inline StringObj* string_obj_from_data(char* data) {
-    return (StringObj*)((uint8_t*)data - offsetof(StringObj, data));
-}
+inline StringObj* string_obj_from_data(char* data) { return (StringObj*)((uint8_t*)data - offsetof(StringObj, data)); }
 
 inline char* alloc_string_data_len(size_t len) {
     size_t total = sizeof(StringObj) + len;
-    auto *obj = (StringObj*)malloc(total);
+    auto* obj = (StringObj*)malloc(total);
     if (!obj) {
         throw std::runtime_error("Out of memory while allocating string");
     }
@@ -52,21 +53,26 @@ inline char* alloc_string_data(std::string_view v) {
 
 inline void retain_string_data(char* data) {
     if (!data) return;
-    auto *obj = string_obj_from_data(data);
+    auto* obj = string_obj_from_data(data);
     obj->ref_count += 1;
 }
 
 inline void release_string_data(char* data) {
     if (!data) return;
-    auto *obj = string_obj_from_data(data);
+    auto* obj = string_obj_from_data(data);
     if (--obj->ref_count == 0) {
         free(obj);
     }
 }
 
+struct ArrayObj;
+Value* alloc_array_data(size_t slots);
+void retain_array_data(Value* data);
+void release_array_data(Value* data);
+
 struct Value {
     ValueType type;
-    uint32_t str_len;  // for string_view support
+    uint32_t len;  // for string_view support
     union {
         int64_t i64;
         int32_t i32;
@@ -75,6 +81,7 @@ struct Value {
         double f64;
         float f32;
         char* str;  // string_view representation
+        Value* arr;
         void* ptr;  // raw pointer for I/O buffers
     } as;
 
@@ -88,58 +95,65 @@ struct Value {
     Value(void* v) : type(ValueType::Ptr) { as.ptr = v; }
     Value(std::string_view v) : type(ValueType::String) {
         as.str = alloc_string_data(v);
-        str_len = static_cast<uint32_t>(v.size());
+        len = static_cast<uint32_t>(v.size());
+    }
+    static Value make_array(Value* data, uint32_t slots) {
+        Value v;
+        v.type = ValueType::Array;
+        v.as.arr = data;
+        v.len = slots;
+        return v;
     }
 
-    Value(const Value& other) : type(other.type), str_len(other.str_len) {
+    Value(const Value& other) : type(other.type), len(other.len) {
         as = other.as;
         if (type == ValueType::String) {
             retain_string_data(as.str);
+        } else if (type == ValueType::Array) {
+            retain_array_data(as.arr);
         }
     }
 
-    Value(Value&& other) noexcept : type(other.type), str_len(other.str_len) {
+    Value(Value&& other) noexcept : type(other.type), len(other.len) {
         as = other.as;
         other.type = ValueType::I32;
         other.as.i32 = 0;
-        other.str_len = 0;
+        other.len = 0;
     }
 
     Value& operator=(const Value& other) {
         if (this == &other) return *this;
-        if (type == ValueType::String) {
-            release_string_data(as.str);
-        }
         type = other.type;
-        str_len = other.str_len;
+        len = other.len;
         as = other.as;
         if (type == ValueType::String) {
             retain_string_data(as.str);
+        } else if (type == ValueType::Array) {
+            retain_array_data(as.arr);
         }
         return *this;
     }
 
     Value& operator=(Value&& other) noexcept {
         if (this == &other) return *this;
-        if (type == ValueType::String) {
-            release_string_data(as.str);
-        }
         type = other.type;
-        str_len = other.str_len;
+        len = other.len;
         as = other.as;
         other.type = ValueType::I32;
         other.as.i32 = 0;
-        other.str_len = 0;
+        other.len = 0;
         return *this;
     }
 
     ~Value() {
         if (type == ValueType::String) {
             release_string_data(as.str);
+        } else if (type == ValueType::Array) {
+            release_array_data(as.arr);
         }
     }
 
-    std::string_view as_string() const { return std::string_view(as.str, str_len); }
+    std::string_view as_string() const { return std::string_view(as.str, len); }
 
     int64_t i64_value() const {
         switch (type) {
@@ -155,6 +169,8 @@ struct Value {
                 return (int64_t)as.f64;
             case ValueType::F32:
                 return (int64_t)as.f32;
+            case ValueType::Array:
+                return (intptr_t)as.arr;
             case ValueType::Ptr:
                 return (intptr_t)as.ptr;
             default:
@@ -181,6 +197,45 @@ struct Value {
         }
     }
 };
+
+struct ArrayObj {
+    uint32_t ref_count;
+    uint32_t slots;
+    Value data[1];
+};
+
+inline ArrayObj* array_obj_from_data(Value* data) { return (ArrayObj*)((uint8_t*)data - offsetof(ArrayObj, data)); }
+
+inline Value* alloc_array_data(size_t slots) {
+    size_t total = sizeof(ArrayObj) + (slots > 0 ? (slots - 1) * sizeof(Value) : 0);
+    auto* obj = (ArrayObj*)malloc(total);
+    if (!obj) {
+        throw std::runtime_error("Out of memory while allocating array");
+    }
+    obj->ref_count = 1;
+    obj->slots = static_cast<uint32_t>(slots);
+    for (size_t i = 0; i < slots; ++i) {
+        new (&obj->data[i]) Value();
+    }
+    return obj->data;
+}
+
+inline void retain_array_data(Value* data) {
+    if (!data) return;
+    auto* obj = array_obj_from_data(data);
+    obj->ref_count += 1;
+}
+
+inline void release_array_data(Value* data) {
+    if (!data) return;
+    auto* obj = array_obj_from_data(data);
+    if (--obj->ref_count == 0) {
+        for (size_t i = 0; i < obj->slots; ++i) {
+            obj->data[i].~Value();
+        }
+        free(obj);
+    }
+}
 // Asssegure that Value is 16 bytes
 static_assert(sizeof(Value) == 16);
 
@@ -206,6 +261,9 @@ inline std::ostream& operator<<(std::ostream& os, const Value& val) {
             break;
         case ValueType::String:
             os << val.as_string();
+            break;
+        case ValueType::Array:
+            os << val.as.arr;
             break;
         case ValueType::Ptr:
             os << val.as.ptr;
@@ -234,7 +292,7 @@ struct Coroutine {
     std::vector<CallFrame> call_stack;
     size_t ip;
     Value result;
-    std::vector<uint8_t> io_buffer;  // For holding temporary data (like sockaddr) during async I/O
+    std::vector<uint8_t> io_buffer;   // For holding temporary data (like sockaddr) during async I/O
     std::vector<Value> pending_args;  // Keep syscall args alive until async completes
     struct __kernel_timespec timeout;
     bool finished = false;

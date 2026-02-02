@@ -95,6 +95,7 @@ class IRGenerator : public parser::ConstASTVisitor {
     void emit_push_str(uint32_t id);
     void emit_str_get();
     void emit_str_set();
+    void emit_arr_alloc(uint32_t slots);
     void emit_load_var(uint16_t slot, uint8_t size = 1);
     void emit_store_var(uint16_t slot, uint8_t size = 1);
     void emit_load_global(uint16_t slot, uint8_t size = 1);

@@ -115,6 +115,12 @@ void disassemble(const IRProgram &program) {
             case OpCode::STR_SET: {
                 break;
             }
+            case OpCode::ARR_ALLOC: {
+                uint32_t slots = *(uint32_t *)&code[ip];
+                ip += 4;
+                std::cout << "slots " << slots;
+                break;
+            }
             case OpCode::STORE_VAR:
             case OpCode::LOAD_VAR: {
                 uint16_t slot = *(uint16_t *)&code[ip];

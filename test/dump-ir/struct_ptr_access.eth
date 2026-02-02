@@ -1,18 +1,9 @@
 // ARGS: --dump-ir
 // EXPECTED_OUTPUT: <function: main> (params: 0, slots: 1)
-// EXPECTED_OUTPUT: PUSH_I32            32
-// EXPECTED_OUTPUT: CALL                addr 16 args 1 <malloc>
-// EXPECTED_OUTPUT: STORE_VAR           slot 0
-// EXPECTED_OUTPUT: PUSH_I32            42
-// EXPECTED_OUTPUT: LOAD_VAR            slot 0
-// EXPECTED_OUTPUT: STORE_PTR_OFFSET    offset 0
-// EXPECTED_OUTPUT: PUSH_I32            100
-// EXPECTED_OUTPUT: LOAD_VAR            slot 0
-// EXPECTED_OUTPUT: STORE_PTR_OFFSET    offset 1
-// EXPECTED_OUTPUT: LOAD_VAR            slot 0
-// EXPECTED_OUTPUT: LOAD_PTR_OFFSET     offset 0
-// EXPECTED_OUTPUT: LOAD_VAR            slot 0
-// EXPECTED_OUTPUT: LOAD_PTR_OFFSET     offset 1
+// EXPECTED_OUTPUT: ARR_ALLOC
+// EXPECTED_OUTPUT: STORE_VAR
+// EXPECTED_OUTPUT: STORE_PTR_OFFSET
+// EXPECTED_OUTPUT: LOAD_PTR_OFFSET
 // EXPECTED_OUTPUT: ADD
 // EXPECTED_OUTPUT: RET
 #include "std/io.eth"
@@ -23,8 +14,8 @@ struct Point {
 }
 
 i32 main() {
-    ptr(Point) p = malloc(32);
-    p.x = 42;
-    p.y = 100;
-    return p.x + p.y;
+    [1]Point p;
+    p[0].x = 42;
+    p[0].y = 100;
+    return p[0].x + p[0].y;
 }

@@ -4,7 +4,7 @@
 #include "std/io.eth"
 
 void main() {
-    ptr(i32) values = malloc(3 * sizeof(i32));
+    [3]i32 values;
     
     values[0] = 5;
     values[1] = 10;
@@ -19,6 +19,4 @@ void main() {
     // Test decrement operator on indexed element
     values[0]--;
     printf("After decrement: %d\n", values[0]);
-    
-    free(values);
 }

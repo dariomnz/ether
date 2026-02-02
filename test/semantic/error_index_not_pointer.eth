@@ -1,4 +1,4 @@
-// EXPECTED_OUTPUT: Index operator '[]' requires a pointer
+// EXPECTED_OUTPUT: Index operator '[]' requires a pointer or array
 #include "std/io.eth"
 
 void main() {

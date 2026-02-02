@@ -15,18 +15,16 @@ struct Outer {
 }
 
 void main() {
-    ptr(Outer) o = malloc(sizeof(Outer));
-    o.x = 1;
-    o.in.a = 10;
-    o.in.b = 20;
-    o.y = 2;
+    [1]Outer o;
+    o[0].x = 1;
+    o[0].in.a = 10;
+    o[0].in.b = 20;
+    o[0].y = 2;
     
-    printf("Outer: %d, %d, %d, %d\n", o.x, o.in.a, o.in.b, o.y);
+    printf("Outer: %d, %d, %d, %d\n", o[0].x, o[0].in.a, o[0].in.b, o[0].y);
     
-    o.in.a++;
-    o.in.b = o.in.b * 2;
+    o[0].in.a++;
+    o[0].in.b = o[0].in.b * 2;
     
-    printf("Updated: %d, %d, %d, %d\n", o.x, o.in.a, o.in.b, o.y);
-    
-    free(o);
+    printf("Updated: %d, %d, %d, %d\n", o[0].x, o[0].in.a, o[0].in.b, o[0].y);
 }
