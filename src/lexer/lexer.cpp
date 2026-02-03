@@ -20,7 +20,8 @@ static const std::unordered_map<std::string_view, TokenType> keywords = {
     {"spawn", TokenType::Spawn},   {"yield", TokenType::Yield},
     {"await", TokenType::Await},   {"coroutine", TokenType::Coroutine},
     {"ptr", TokenType::Ptr},       {"void", TokenType::Void},
-    {"struct", TokenType::Struct}, {"sizeof", TokenType::Sizeof}};
+    {"struct", TokenType::Struct}, {"enum", TokenType::Enum},
+    {"sizeof", TokenType::Sizeof}};
 
 Lexer::Lexer(std::string_view source, std::string filename) : m_source(source), m_filename(std::move(filename)) {}
 

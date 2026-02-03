@@ -41,7 +41,7 @@
             "patterns": [
                 {
                     "name": "keyword.control.eth",
-                    "match": "\\b(return|if|else|while|for|spawn|yield|await|coroutine|struct|sizeof)\\b"
+                    "match": "\\b(return|if|else|while|for|spawn|yield|await|coroutine|struct|sizeof|enum)\\b"
                 }
             ]
         },

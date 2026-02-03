@@ -48,6 +48,8 @@ struct SemanticTokensVisitor : public parser::ConstASTVisitor {
     void visit(const parser::DecrementExpression &node) override;
     void visit(const parser::AwaitExpression &node) override;
     void visit(const parser::StructDeclaration &node) override;
+    void visit(const parser::EnumDeclaration &node) override;
+    void visit(const parser::EnumAccessExpression &node) override;
     void visit(const parser::MemberAccessExpression &node) override;
     void visit(const parser::SizeofExpression &node) override;
     void visit(const parser::IndexExpression &node) override;

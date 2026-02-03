@@ -22,7 +22,7 @@ i32 handle_client(i32 fd) {
 }
 
 i32 main() {
-    i32 server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    i32 server_fd = socket(SocketDomain::INET, SocketType::STREAM, SocketProtocol::TCP);
     if (server_fd < 0) {
         printf("Failed to create socket\n");
         return 1;

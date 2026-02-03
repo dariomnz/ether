@@ -8,6 +8,8 @@ namespace ether::ir_gen {
 void IRGenerator::visit(const parser::StructDeclaration &node) {
     // Layout already collected
 }
+void IRGenerator::visit(const parser::EnumDeclaration &node) {}
+void IRGenerator::visit(const parser::EnumAccessExpression &node) { emit_push_i32((int32_t)node.value); }
 void IRGenerator::visit(const parser::Include &node) {}
 
 void IRGenerator::visit(const parser::SizeofExpression &node) { emit_push_i32(get_type_size(node.target_type)); }

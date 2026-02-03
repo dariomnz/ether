@@ -47,6 +47,8 @@ class IRGenerator : public parser::ConstASTVisitor {
     void visit(const parser::VariableDeclaration &node) override;
     void visit(const parser::Function &node) override;
     void visit(const parser::StructDeclaration &node) override;
+    void visit(const parser::EnumDeclaration &node) override;
+    void visit(const parser::EnumAccessExpression &node) override;
     void visit(const parser::Program &node) override;
     void visit(const parser::MemberAccessExpression &node) override;
     void visit(const parser::IndexExpression &node) override;

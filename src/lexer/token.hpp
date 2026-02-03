@@ -27,6 +27,7 @@ enum class TokenType {
     Ptr,
     Void,
     Struct,
+    Enum,
     Sizeof,
 
     // Identifiers and Literals

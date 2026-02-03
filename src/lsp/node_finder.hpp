@@ -19,6 +19,7 @@ struct NodeFinder : public parser::ConstASTVisitor {
 
     std::string find_struct_in_type(const parser::DataType &type);
     void resolve_struct(const std::string &name);
+    void resolve_enum(const std::string &name);
     void check_complex_type(const parser::DataType &type, int line, int start_col);
 
     void visit(const parser::Program &node) override;
@@ -43,6 +44,8 @@ struct NodeFinder : public parser::ConstASTVisitor {
     void visit(const parser::AwaitExpression &node) override;
     void visit(const parser::Include &node) override;
     void visit(const parser::StructDeclaration &node) override;
+    void visit(const parser::EnumDeclaration &node) override;
+    void visit(const parser::EnumAccessExpression &node) override;
     void visit(const parser::MemberAccessExpression &node) override;
     void visit(const parser::SizeofExpression &node) override;
     void visit(const parser::IndexExpression &node) override;

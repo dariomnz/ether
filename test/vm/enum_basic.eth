@@ -1,0 +1,13 @@
+// EXPECTED_OUTPUT: 2
+
+enum Color {
+    RED = 1,
+    BLUE = 2
+}
+
+#include "std/io.eth"
+
+i32 main() {
+    printf("%d\n", Color::BLUE);
+    return 0;
+}

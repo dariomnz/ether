@@ -34,6 +34,8 @@ class Analyzer : public parser::ASTVisitor {
     void visit(parser::VariableDeclaration &node) override;
     void visit(parser::Function &node) override;
     void visit(parser::StructDeclaration &node) override;
+    void visit(parser::EnumDeclaration &node) override;
+    void visit(parser::EnumAccessExpression &node) override;
     void visit(parser::Program &node) override;
     void visit(parser::MemberAccessExpression &node) override;
     void visit(parser::IndexExpression &node) override;
@@ -68,6 +70,7 @@ class Analyzer : public parser::ASTVisitor {
         std::unordered_map<std::string, std::pair<parser::DataType, uint16_t>> members;
         uint16_t total_size;
     };
+    std::unordered_map<std::string, std::unordered_map<std::string, int64_t>> m_enums;
 
     std::vector<Scope> m_scopes;
     std::unordered_map<std::string, FunctionInfo> m_functions;

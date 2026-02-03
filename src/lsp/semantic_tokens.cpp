@@ -26,6 +26,7 @@ void SemanticTokensVisitor::highlight_complex_type(const DataType &type, int lin
 
 void SemanticTokensVisitor::visit(const Program &node) {
     for (auto &s : node.structs) s->accept(*this);
+    for (auto &e : node.enums) e->accept(*this);
     for (auto &g : node.globals) g->accept(*this);
     for (auto &f : node.functions) f->accept(*this);
 }
@@ -144,6 +145,20 @@ void SemanticTokensVisitor::visit(const StructDeclaration &node) {
         // Member name: type 1 (variable/member)
         tokens.push_back({m.name_line, m.name_col, (int)m.name.size(), 1});
     }
+}
+
+void SemanticTokensVisitor::visit(const parser::EnumDeclaration &node) {
+    if (node.filename != target_filename) return;
+    tokens.push_back({node.name_line, node.name_col, (int)node.name.size(), 3});
+    for (const auto &m : node.members) {
+        tokens.push_back({m.line, m.col, (int)m.name.size(), 1});
+    }
+}
+
+void SemanticTokensVisitor::visit(const parser::EnumAccessExpression &node) {
+    if (node.filename != target_filename) return;
+    tokens.push_back({node.line, node.column, (int)node.enum_name.size(), 3});
+    tokens.push_back({node.line, node.column + (int)node.enum_name.size() + 2, (int)node.member_name.size(), 1});
 }
 
 void SemanticTokensVisitor::visit(const MemberAccessExpression &node) {

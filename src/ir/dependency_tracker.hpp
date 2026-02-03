@@ -84,6 +84,8 @@ struct DependencyTracker : public parser::ConstASTVisitor {
         if (node.index) node.index->accept(*this);
     }
     void visit(const parser::StructDeclaration &node) override {}
+    void visit(const parser::EnumDeclaration &node) override {}
+    void visit(const parser::EnumAccessExpression &node) override {}
     void visit(const parser::AwaitExpression &node) override {
         if (node.expr) node.expr->accept(*this);
     }

@@ -153,8 +153,14 @@ void Parser::parse_top_level(Program &program) {
         // Merge sub_program into current program
         for (auto &inc : sub_program->includes) program.includes.push_back(std::move(inc));
         for (auto &str : sub_program->structs) program.structs.push_back(std::move(str));
+        for (auto &en : sub_program->enums) program.enums.push_back(std::move(en));
         for (auto &glob : sub_program->globals) program.globals.push_back(std::move(glob));
         for (auto &func : sub_program->functions) program.functions.push_back(std::move(func));
+        return;
+    }
+
+    if (check(lexer::TokenType::Enum)) {
+        program.enums.push_back(parse_enum_declaration());
         return;
     }
 
@@ -249,6 +255,54 @@ void Parser::parse_top_level(Program &program) {
                                                                         std::move(init), m_filename, start_token.line,
                                                                         start_token.column, len));
     }
+}
+
+std::unique_ptr<EnumDeclaration> Parser::parse_enum_declaration() {
+    const auto &start_token = peek();
+    match(lexer::TokenType::Enum);
+    if (!check(lexer::TokenType::Identifier)) {
+        const auto &tok = peek();
+        throw CompilerError("Expected enum name", m_filename, tok.line, tok.column, (int)tok.lexeme.size());
+    }
+    const auto &name_token = advance();
+    std::string name(name_token.lexeme);
+    if (!match(lexer::TokenType::LBrace)) {
+        const auto &tok = peek();
+        throw CompilerError("Expected '{' after enum name", m_filename, tok.line, tok.column, (int)tok.lexeme.size());
+    }
+    std::vector<EnumMember> members;
+    while (!check(lexer::TokenType::RBrace) && !check(lexer::TokenType::EOF_TOKEN)) {
+        if (!check(lexer::TokenType::Identifier)) {
+            const auto &tok = peek();
+            throw CompilerError("Expected enum member name", m_filename, tok.line, tok.column, (int)tok.lexeme.size());
+        }
+        const auto &mem_tok = advance();
+        std::string mem_name(mem_tok.lexeme);
+        if (!match(lexer::TokenType::Equal)) {
+            const auto &tok = peek();
+            throw CompilerError("Expected '=' after enum member", m_filename, tok.line, tok.column,
+                                (int)tok.lexeme.size());
+        }
+        if (!check(lexer::TokenType::IntegerLiteral)) {
+            const auto &tok = peek();
+            throw CompilerError("Expected integer value for enum member", m_filename, tok.line, tok.column,
+                                (int)tok.lexeme.size());
+        }
+        const auto &val_token = advance();
+        int64_t value = std::stoll(std::string(val_token.lexeme));
+        members.push_back({std::move(mem_name), value, mem_tok.line, mem_tok.column});
+        if (match(lexer::TokenType::Comma)) {
+            continue;
+        }
+    }
+    if (!match(lexer::TokenType::RBrace)) {
+        const auto &tok = peek();
+        throw CompilerError("Expected '}' after enum declaration", m_filename, tok.line, tok.column,
+                            (int)tok.lexeme.size());
+    }
+    int len = (int)(m_tokens[m_pos - 1].column - start_token.column) + (int)m_tokens[m_pos - 1].lexeme.size();
+    return std::make_unique<EnumDeclaration>(name, name_token.line, name_token.column, std::move(members), m_filename,
+                                             start_token.line, start_token.column, len);
 }
 
 std::unique_ptr<Function> Parser::parse_function() {
@@ -634,7 +688,16 @@ std::unique_ptr<Expression> Parser::parse_primary() {
     if (match(lexer::TokenType::Identifier)) {
         std::string name = std::string(m_tokens[m_pos - 1].lexeme);
         std::unique_ptr<Expression> expr;
-        if (match(lexer::TokenType::LParent)) {
+        if (match(lexer::TokenType::ColonColon)) {
+            if (!check(lexer::TokenType::Identifier)) {
+                const auto &tok = peek();
+                throw CompilerError("Expected enum member name after '::'", m_filename, tok.line, tok.column,
+                                    (int)tok.lexeme.size());
+            }
+            std::string member = std::string(advance().lexeme);
+            expr = std::make_unique<EnumAccessExpression>(std::move(name), std::move(member), m_filename, token.line,
+                                                          token.column, (int)name.size());
+        } else if (match(lexer::TokenType::LParent)) {
             std::vector<std::unique_ptr<Expression>> args;
             if (!check(lexer::TokenType::RParent)) {
                 do {

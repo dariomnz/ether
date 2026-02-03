@@ -29,6 +29,7 @@ class Parser {
     void parse_top_level(Program &program);
     std::unique_ptr<Function> parse_function();
     std::unique_ptr<StructDeclaration> parse_struct_declaration();
+    std::unique_ptr<EnumDeclaration> parse_enum_declaration();
     std::unique_ptr<Block> parse_block();
     std::unique_ptr<Statement> parse_statement();
     std::unique_ptr<Expression> parse_expression();

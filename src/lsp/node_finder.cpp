@@ -61,6 +61,28 @@ void NodeFinder::resolve_struct(const std::string &name) {
     }
 }
 
+void NodeFinder::resolve_enum(const std::string &name) {
+    if (!root_program) return;
+    for (const auto &e : root_program->enums) {
+        if (e->name == name) {
+            found = true;
+            def_filename = e->filename;
+            def_line = e->name_line;
+            def_col = e->name_col;
+            def_size = (int)e->name.size();
+
+            std::stringstream ss;
+            ss << "enum " << e->name << " {\n";
+            for (const auto &m : e->members) {
+                ss << "  " << m.name << " = " << m.value << ",\n";
+            }
+            ss << "}";
+            hover_info = ss.str();
+            return;
+        }
+    }
+}
+
 void NodeFinder::visit(const Program &node) {
     debug_msg("Visiting program " << node.filename);
     for (auto &inc : node.includes) {
@@ -74,6 +96,10 @@ void NodeFinder::visit(const Program &node) {
     for (auto &s : node.structs) {
         if (found) return;
         s->accept(*this);
+    }
+    for (auto &e : node.enums) {
+        if (found) return;
+        e->accept(*this);
     }
     for (auto &f : node.functions) {
         if (found) return;
@@ -340,6 +366,54 @@ void NodeFinder::visit(const StructDeclaration &node) {
     for (const auto &m : node.members) {
         check_complex_type(m.type, m.line, m.col);
         if (found) return;
+    }
+}
+
+void NodeFinder::visit(const parser::EnumDeclaration &node) {
+    if (found || node.filename != target_filename) return;
+    if (node.name_line == line && col >= node.name_col && col < node.name_col + (int)node.name.size()) {
+        resolve_enum(node.name);
+        return;
+    }
+    for (const auto &m : node.members) {
+        if (line == m.line && col >= m.col && col < m.col + (int)m.name.size()) {
+            found = true;
+            def_filename = node.filename;
+            def_line = m.line;
+            def_col = m.col;
+            def_size = (int)m.name.size();
+            hover_info = "(enum) " + node.name + "::" + m.name + " = " + std::to_string(m.value);
+            return;
+        }
+    }
+}
+
+void NodeFinder::visit(const parser::EnumAccessExpression &node) {
+    if (found || node.filename != target_filename) return;
+    if (line == node.line && col >= node.column && col < node.column + (int)node.enum_name.size()) {
+        resolve_enum(node.enum_name);
+        return;
+    }
+    if (line == node.line) {
+        int mem_col = node.column + (int)node.enum_name.size() + 2;
+        if (col >= mem_col && col < mem_col + (int)node.member_name.size()) {
+            if (!root_program) return;
+            for (const auto &e : root_program->enums) {
+                if (e->name == node.enum_name) {
+                    for (const auto &m : e->members) {
+                        if (m.name == node.member_name) {
+                            found = true;
+                            def_filename = e->filename;
+                            def_line = m.line;
+                            def_col = m.col;
+                            def_size = (int)m.name.size();
+                            hover_info = "(enum) " + e->name + "::" + m.name + " = " + std::to_string(m.value);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

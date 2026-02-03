@@ -14,6 +14,7 @@ struct StringLiteral;
 struct VariableExpression;
 struct FunctionCall;
 struct BinaryExpression;
+struct EnumAccessExpression;
 struct Block;
 struct IfStatement;
 struct ReturnStatement;
@@ -30,6 +31,8 @@ struct VariableDeclaration;
 struct Function;
 struct Include;
 struct StructDeclaration;
+struct EnumDeclaration;
+struct EnumAccessExpression;
 struct MemberAccessExpression;
 struct IndexExpression;
 struct SizeofExpression;
@@ -59,6 +62,8 @@ struct ConstASTVisitor {
     virtual void visit(const Function& node) = 0;
     virtual void visit(const Include& node) = 0;
     virtual void visit(const StructDeclaration& node) = 0;
+    virtual void visit(const EnumDeclaration& node) = 0;
+    virtual void visit(const EnumAccessExpression& node) = 0;
     virtual void visit(const MemberAccessExpression& node) = 0;
     virtual void visit(const IndexExpression& node) = 0;
     virtual void visit(const SizeofExpression& node) = 0;
@@ -89,6 +94,8 @@ struct ASTVisitor {
     virtual void visit(Function& node) = 0;
     virtual void visit(Include& node) = 0;
     virtual void visit(StructDeclaration& node) = 0;
+    virtual void visit(EnumDeclaration& node) = 0;
+    virtual void visit(EnumAccessExpression& node) = 0;
     virtual void visit(MemberAccessExpression& node) = 0;
     virtual void visit(IndexExpression& node) = 0;
     virtual void visit(SizeofExpression& node) = 0;
@@ -119,6 +126,8 @@ struct DefaultIgnoreConstASTVisitor : public ConstASTVisitor {
     virtual void visit(const Function& node) {};
     virtual void visit(const Include& node) {};
     virtual void visit(const StructDeclaration& node) {};
+    virtual void visit(const EnumDeclaration& node) {};
+    virtual void visit(const EnumAccessExpression& node) {};
     virtual void visit(const MemberAccessExpression& node) {};
     virtual void visit(const IndexExpression& node) {};
     virtual void visit(const SizeofExpression& node) {};
@@ -481,9 +490,41 @@ struct StructDeclaration : ASTNode {
     void accept(ConstASTVisitor& visitor) const override { visitor.visit(*this); }
 };
 
+struct EnumAccessExpression : Expression {
+    std::string enum_name;
+    std::string member_name;
+    int64_t value = 0;
+    EnumAccessExpression(std::string en, std::string mem, std::string fn, int l, int c, int len)
+        : Expression(std::move(fn), l, c, len), enum_name(std::move(en)), member_name(std::move(mem)) {}
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ConstASTVisitor& visitor) const override { visitor.visit(*this); }
+};
+
+struct EnumMember {
+    std::string name;
+    int64_t value;
+    int line = 0;
+    int col = 0;
+};
+
+struct EnumDeclaration : ASTNode {
+    std::string name;
+    std::vector<EnumMember> members;
+    EnumDeclaration(std::string n, int nl, int nc, std::vector<EnumMember> m, std::string fn, int l, int c, int len)
+        : ASTNode(std::move(fn), l, c, len), name(std::move(n)), members(std::move(m)) {
+        name_line = nl;
+        name_col = nc;
+    }
+    void accept(ASTVisitor& visitor) override { visitor.visit(*this); }
+    void accept(ConstASTVisitor& visitor) const override { visitor.visit(*this); }
+    int name_line = 0;
+    int name_col = 0;
+};
+
 struct Program : ASTNode {
     std::vector<std::unique_ptr<Include>> includes;
     std::vector<std::unique_ptr<StructDeclaration>> structs;
+    std::vector<std::unique_ptr<EnumDeclaration>> enums;
     std::vector<std::unique_ptr<VariableDeclaration>> globals;
     std::vector<std::unique_ptr<Function>> functions;
     Program() : ASTNode("", 0, 0) {}

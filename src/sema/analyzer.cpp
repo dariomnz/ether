@@ -12,6 +12,14 @@ void Analyzer::analyze(Program &program) {
     // Register built-ins
     m_functions["syscall"] = {DataType(DataType::Kind::I64), {}, true, "", 0, 0};
 
+    for (const auto &en : program.enums) {
+        std::unordered_map<std::string, int64_t> values;
+        for (const auto &member : en->members) {
+            values[member.name] = member.value;
+        }
+        m_enums[en->name] = std::move(values);
+    }
+
     // First pass: collect struct definitions
     for (const auto &str : program.structs) {
         StructInfo info;
@@ -399,6 +407,25 @@ const Analyzer::FunctionInfo *Analyzer::lookup_function(const std::string &name)
 
 void Analyzer::visit(StructDeclaration &node) {
     // Already processed in first pass
+}
+
+void Analyzer::visit(EnumDeclaration &node) {
+    // Already processed in first pass
+}
+
+void Analyzer::visit(EnumAccessExpression &node) {
+    auto it = m_enums.find(node.enum_name);
+    if (it == m_enums.end()) {
+        throw CompilerError("Undefined enum: " + node.enum_name, node.filename, node.line, node.column, node.length);
+    }
+    auto mit = it->second.find(node.member_name);
+    if (mit == it->second.end()) {
+        throw CompilerError("Enum " + node.enum_name + " has no member named " + node.member_name, node.filename,
+                            node.line, node.column, node.length);
+    }
+    node.value = mit->second;
+    m_current_type = DataType(DataType::Kind::I32);
+    node.type = std::make_unique<DataType>(m_current_type);
 }
 
 void Analyzer::visit(MemberAccessExpression &node) {
