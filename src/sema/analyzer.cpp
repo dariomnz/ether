@@ -19,14 +19,7 @@ void Analyzer::analyze(Program &program) {
         uint16_t offset = 0;
         for (const auto &member : str->members) {
             info.members[member.name] = {member.type, offset};
-            uint16_t member_size = 1;
-            if (member.type.kind == DataType::Kind::Struct) {
-                auto it = m_structs.find(member.type.struct_name);
-                if (it != m_structs.end()) {
-                    member_size = it->second.total_size;
-                }
-            }
-            offset += member_size;
+            offset++;
         }
         info.total_size = offset;
         m_structs[str->name] = info;
@@ -453,7 +446,8 @@ void Analyzer::visit(SizeofExpression &node) {
         }
     } else if (node.target_type.kind == DataType::Kind::Array) {
         if (!node.target_type.inner) {
-            throw CompilerError("Array type must have an element type", node.filename, node.line, node.column, node.length);
+            throw CompilerError("Array type must have an element type", node.filename, node.line, node.column,
+                                node.length);
         }
         uint32_t element_slots = 1;
         if (node.target_type.inner->kind == DataType::Kind::Struct) {

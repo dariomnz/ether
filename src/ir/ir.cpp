@@ -26,6 +26,7 @@ std::ostream &operator<<(std::ostream &os, OpCode op) {
         {OpCode::STR_GET, "STR_GET"},
         {OpCode::STR_SET, "STR_SET"},
         {OpCode::ARR_ALLOC, "ARR_ALLOC"},
+        {OpCode::STRUCT_ALLOC, "STRUCT_ALLOC"},
         {OpCode::SYSCALL, "SYSCALL"},
         {OpCode::CALL, "CALL"},
         {OpCode::JMP, "JMP"},
@@ -49,8 +50,6 @@ std::ostream &operator<<(std::ostream &os, OpCode op) {
         {OpCode::STORE_GLOBAL, "STORE_GLOBAL"},
         {OpCode::LOAD_PTR_OFFSET, "LOAD_PTR_OFFSET"},
         {OpCode::STORE_PTR_OFFSET, "STORE_PTR_OFFSET"},
-        {OpCode::LEA_STACK, "LEA_STACK"},
-        {OpCode::LEA_GLOBAL, "LEA_GLOBAL"},
     };
     auto it = op_to_str.find(op);
     if (it != op_to_str.end()) {

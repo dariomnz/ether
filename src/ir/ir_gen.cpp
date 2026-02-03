@@ -33,17 +33,30 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
     tracker.trace("main");
     m_reachable = std::move(tracker.reachable);
 
-    // 2. Global Scope setup
+    // 2. Collect struct layouts
+    for (const auto &str : ast.structs) {
+        StructInfo info;
+        uint16_t offset = 0;
+        for (const auto &member : str->members) {
+            info.member_offsets[member.name] = (uint8_t)offset;
+            uint16_t member_size = 1;
+            if (member.type.kind == parser::DataType::Kind::Struct) {
+                member_size = 1;  // struct members are heap handles
+                info.struct_members.push_back({(uint8_t)offset, member.type.struct_name});
+            }
+            offset += member_size;
+        }
+        info.total_size = offset;
+        m_structs[str->name] = info;
+    }
+
+    // 3. Global Scope setup
     m_scopes.push_back({{}, 0, true});
 
     // Define ONLY reachable globals
     for (const auto &global : ast.globals) {
         if (m_reachable.contains(global->name)) {
-            uint16_t size = 1;
-            if (global->type.kind == parser::DataType::Kind::Struct) {
-                size = m_structs.at(global->type.struct_name).total_size;
-            }
-            define_var(global->name, size);
+            define_var(global->name);
         }
     }
     m_program.num_globals = m_scopes[0].next_slot;
@@ -57,32 +70,13 @@ ir::IRProgram IRGenerator::generate(const parser::Program &ast) {
     }
     m_program.functions["syscall"] = {0xFFFFFFFF, 0, 0};
 
-    // 3. Collect struct layouts
-    for (const auto &str : ast.structs) {
-        StructInfo info;
-        uint16_t offset = 0;
-        for (const auto &member : str->members) {
-            info.member_offsets[member.name] = (uint8_t)offset;
-            uint16_t member_size = 1;
-            if (member.type.kind == parser::DataType::Kind::Struct) {
-                auto it = m_structs.find(member.type.struct_name);
-                if (it != m_structs.end()) {
-                    member_size = it->second.total_size;
-                }
-            }
-            offset += member_size;
-        }
-        info.total_size = offset;
-        m_structs[str->name] = info;
-    }
-
     // 4. Entry point / Global initialization
     m_program.main_addr = 0;
     for (const auto &global : ast.globals) {
         if (m_reachable.contains(global->name) && global->init) {
             global->init->accept(*this);
             Symbol s = get_var_symbol(global->name);
-            emit_store_global(s.slot, 1);
+            emit_store_global(s.slot);
         }
     }
 

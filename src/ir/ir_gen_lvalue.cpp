@@ -18,15 +18,16 @@ void IRGenerator::LValueResolver::visit(const parser::MemberAccessExpression &m)
         is_ptr = true;
     } else {
         struct_name = m.object->type->struct_name;
+        is_ptr = true;  // structs are heap handles now
     }
     uint8_t m_offset = gen->m_structs.at(struct_name).member_offsets.at(m.member_name);
 
     if (kind == Stack) {
         if (is_ptr) {
             if (is_global) {
-                gen->emit_load_global(slot, 1);
+                gen->emit_load_global(slot);
             } else {
-                gen->emit_load_var(slot, 1);
+                gen->emit_load_var(slot);
             }
             kind = Heap;
             offset = m_offset;
@@ -35,7 +36,7 @@ void IRGenerator::LValueResolver::visit(const parser::MemberAccessExpression &m)
         }
     } else {
         if (is_ptr) {
-            gen->emit_load_ptr_offset(offset, 1);
+            gen->emit_load_ptr_offset(offset);
             offset = m_offset;
         } else {
             offset += m_offset;
@@ -51,15 +52,15 @@ void IRGenerator::LValueResolver::visit(const parser::IndexExpression &idx) {
     if (kind == Stack) {
         // Load the pointer value (arrays are pointer-like)
         if (is_global) {
-            gen->emit_load_global(slot, 1);
+            gen->emit_load_global(slot);
         } else {
-            gen->emit_load_var(slot, 1);
+            gen->emit_load_var(slot);
         }
     } else {
         // Already have a pointer on stack from previous operations
         // Only load if we have a non-zero offset (nested member access)
         if (offset != 0) {
-            gen->emit_load_ptr_offset(offset, 1);
+            gen->emit_load_ptr_offset(offset);
         }
     }
 
@@ -75,7 +76,7 @@ void IRGenerator::LValueResolver::visit(const parser::IndexExpression &idx) {
             }
         } else if (idx.object->type->kind == parser::DataType::Kind::Array && idx.object->type->inner) {
             if (idx.object->type->inner->kind == parser::DataType::Kind::Struct) {
-                element_size = gen->m_structs.at(idx.object->type->inner->struct_name).total_size;
+                element_size = 1;
             }
         }
     }

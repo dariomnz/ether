@@ -1,7 +1,7 @@
 // ARGS: --dump-ir
 // EXPECTED_OUTPUT: <function: Data::get_id> (params: 1, slots: 1)
-// EXPECTED_OUTPUT: LOAD_VAR            slot 0 size 1
-// EXPECTED_OUTPUT: LOAD_PTR_OFFSET     offset 0 size 1
+// EXPECTED_OUTPUT: LOAD_VAR            slot 0
+// EXPECTED_OUTPUT: LOAD_PTR_OFFSET     offset 0
 struct Data {
     i32 id;
 }

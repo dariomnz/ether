@@ -1,7 +1,6 @@
 // EXPECTED_OUTPUT: Values: 10, 20, 30
 #include "std/io.eth"
 
-// Function that creates and returns a pointer to a heap-allocated array
 [3]i32 create_array() {
     [3]i32 arr;
     arr[0] = 10;

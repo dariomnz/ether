@@ -1,11 +1,17 @@
-// EXPECTED_OUTPUT: Outer: 1, 10, 20, 2
-// EXPECTED_OUTPUT: Updated: 1, 11, 40, 2
+// EXPECTED_OUTPUT: Outer: 1, 10, 20, 100, 200, 2
+// EXPECTED_OUTPUT: Updated: 1, 11, 40, 101, 199, 2
 
 #include "std/io.eth"
+
+struct DeepInner {
+    i32 a;
+    i32 b;
+}
 
 struct Inner {
     i32 a;
     i32 b;
+    DeepInner di;
 }
 
 struct Outer {
@@ -19,12 +25,16 @@ void main() {
     o.x = 1;
     o.in.a = 10;
     o.in.b = 20;
+    o.in.di.a = 100;
+    o.in.di.b = 200;
     o.y = 2;
     
-    printf("Outer: %d, %d, %d, %d\n", o.x, o.in.a, o.in.b, o.y);
+    printf("Outer: %d, %d, %d, %d, %d, %d\n", o.x, o.in.a, o.in.b, o.in.di.a, o.in.di.b, o.y);
     
     o.in.a++;
     o.in.b = o.in.b * 2;
+    o.in.di.a++;
+    o.in.di.b--;
     
-    printf("Updated: %d, %d, %d, %d\n", o.x, o.in.a, o.in.b, o.y);
+    printf("Updated: %d, %d, %d, %d, %d, %d\n", o.x, o.in.a, o.in.b, o.in.di.a, o.in.di.b, o.y);
 }

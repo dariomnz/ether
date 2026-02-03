@@ -1,7 +1,7 @@
 #include "std/io.eth"
 
 i32 handle_client(i32 fd) {
-    ptr buf = malloc(1024);
+    [1024]i32 buf;
     printf("Client connected %d\n", fd);
     i32 running = 1;
     for (; running == 1;) {
@@ -15,8 +15,6 @@ i32 handle_client(i32 fd) {
             printf("Sent %d bytes\n", n);
         }
     }
-    
-    free(buf);
     
     // shutdown(fd, 2);
     close(fd);

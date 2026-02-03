@@ -239,6 +239,21 @@ Value VM::run(bool collect_stats) {
                 }
 
                 case ir::OpCode::ARR_ALLOC: {
+                    uint32_t count = READ_UINT32();
+                    uint32_t elem_struct_slots = READ_UINT32();
+
+                    Value *data = alloc_array_data(count);
+                    if (elem_struct_slots > 0) {
+                        for (uint32_t i = 0; i < count; ++i) {
+                            Value *struct_data = alloc_array_data(elem_struct_slots);
+                            data[i] = Value::make_array(struct_data, elem_struct_slots);
+                        }
+                    }
+                    push(Value::make_array(data, count));
+                    break;
+                }
+
+                case ir::OpCode::STRUCT_ALLOC: {
                     uint32_t slots = READ_UINT32();
                     Value *data = alloc_array_data(slots);
                     push(Value::make_array(data, slots));
@@ -247,47 +262,31 @@ Value VM::run(bool collect_stats) {
 
                 case ir::OpCode::STORE_VAR: {
                     uint16_t slot = READ_UINT16();
-                    uint8_t size = READ_BYTE();
                     auto &stack = CUR_CORO().stack;
                     auto &call_stack = CUR_CORO().call_stack;
                     size_t base = call_stack.back().stack_base + slot;
-
-                    // Store in reverse order because we are popping from stack
-                    for (int i = size - 1; i >= 0; --i) {
-                        stack[base + i] = stack.back();
-                        stack.pop_back();
-                    }
+                    stack[base] = pop();
                     break;
                 }
 
                 case ir::OpCode::LOAD_GLOBAL: {
                     uint16_t slot = READ_UINT16();
-                    uint8_t size = READ_BYTE();
-                    for (uint8_t i = 0; i < size; ++i) {
-                        push(m_globals[slot + i]);
-                    }
+                    push(m_globals[slot]);
                     break;
                 }
 
                 case ir::OpCode::STORE_GLOBAL: {
                     uint16_t slot = READ_UINT16();
-                    uint8_t size = READ_BYTE();
-                    // Store in reverse order
-                    for (int i = size - 1; i >= 0; --i) {
-                        m_globals[slot + i] = pop();
-                    }
+                    m_globals[slot] = pop();
                     break;
                 }
 
                 case ir::OpCode::LOAD_VAR: {
                     uint16_t slot = READ_UINT16();
-                    uint8_t size = READ_BYTE();
                     auto &stack = CUR_CORO().stack;
                     auto &call_stack = CUR_CORO().call_stack;
                     size_t base = call_stack.back().stack_base + slot;
-                    for (uint8_t i = 0; i < size; ++i) {
-                        push(stack[base + i]);
-                    }
+                    push(stack[base]);
                     break;
                 }
 
@@ -403,52 +402,25 @@ Value VM::run(bool collect_stats) {
                 }
 
                 case ir::OpCode::RET: {
-                    uint8_t size = READ_BYTE();
                     auto &stack = CUR_CORO().stack;
                     auto &call_stack = CUR_CORO().call_stack;
 
                     // Extract return values
-                    std::vector<Value> results;
-                    if (size > 0) {
-                        results.resize(size);
-                        // Pop in reverse order
-                        for (int i = size - 1; i >= 0; --i) {
-                            results[i] = stack.back();
-                            stack.pop_back();
-                        }
-                    } else {
-                        // Default return value if size is 0?
-                        // The original code popped back anyway.
-                        // Assuming RET always returns something or nothing if size 0.
-                        // Actually void functions might return 0 size.
-                        // Original code: Value res = stack.back(); stack.pop_back(); (This implies 1 value always)
-
-                        // If size is 0, we don't return anything.
-                        // But wait, the original code always returned a value (even for void?).
-                        // If the function returns void, IR gen emits PUSH 0; RET. So size 1.
-                        // So usually size >= 1.
-                    }
-
-                    // Value res = stack.back();
-                    // stack.pop_back();
-
+                    Value ret_val = pop();
                     size_t ret_addr = call_stack.back().return_addr;
                     size_t stack_base = call_stack.back().stack_base;
                     call_stack.pop_back();
 
                     if (call_stack.empty()) {
-                        if (m_current_coro == 0 && !results.empty())
-                            main_result = results.back();  // Or first? Main usually returns 1 value.
-                        if (!results.empty()) CUR_CORO().result = results.back();  // Coroutine result usually 1 value?
+                        if (m_current_coro == 0)
+                            main_result = ret_val;
+                        CUR_CORO().result = ret_val;
                         CUR_CORO().finished = true;
                         yielded = true;
                     } else {
                         stack.resize(stack_base);  // Restore stack frame
                         CUR_CORO().ip = ret_addr;
-                        // Push results back
-                        for (const auto &val : results) {
-                            push(val);
-                        }
+                        push(ret_val);
                     }
                     break;
                 }
@@ -582,23 +554,6 @@ Value VM::run(bool collect_stats) {
                     break;
                 }
 
-                case ir::OpCode::LEA_STACK: {
-                    uint16_t slot = READ_UINT16();
-                    size_t base = CUR_CORO().call_stack.back().stack_base;
-                    // Taking address of stack element
-                    // WARNING: Unsafe if stack reallocates. We reserve 64k to mitigate.
-                    Value *ptr = &CUR_CORO().stack[base + slot];
-                    push(Value(ptr));
-                    break;
-                }
-
-                case ir::OpCode::LEA_GLOBAL: {
-                    uint16_t slot = READ_UINT16();
-                    Value *ptr = &m_globals[slot];
-                    push(Value(ptr));
-                    break;
-                }
-
                 case ir::OpCode::YIELD: {
                     yielded = true;
                     break;
@@ -618,7 +573,6 @@ Value VM::run(bool collect_stats) {
 
                 case ir::OpCode::LOAD_PTR_OFFSET: {
                     int32_t offset = READ_I32();
-                    uint8_t size = READ_BYTE();
                     Value ptr_val = pop();
                     void *ptr_addr;
 
@@ -635,15 +589,12 @@ Value VM::run(bool collect_stats) {
                     if (!ptr_addr)
                         throw std::runtime_error("Null pointer dereference at ip " + std::to_string(CUR_CORO().ip));
                     Value *ptr = (Value *)ptr_addr;
-                    for (uint8_t i = 0; i < size; ++i) {
-                        push(ptr[offset + i]);
-                    }
+                    push(ptr[offset]);
                     break;
                 }
 
                 case ir::OpCode::STORE_PTR_OFFSET: {
                     int32_t offset = READ_I32();
-                    uint8_t size = READ_BYTE();
                     Value ptr_val = pop();  // Pointer is popped AFTER values?
                     // Wait, standard convention is: push value, push pointer, STORE.
                     // But STORE_PTR_OFFSET popped ptr then val.
@@ -668,10 +619,7 @@ Value VM::run(bool collect_stats) {
                     if (!ptr_addr)
                         throw std::runtime_error("Null pointer dereference at ip " + std::to_string(CUR_CORO().ip));
                     Value *ptr = (Value *)ptr_addr;
-
-                    for (int i = size - 1; i >= 0; --i) {
-                        ptr[offset + i] = pop();
-                    }
+                    ptr[offset] = pop();
                     break;
                 }
 

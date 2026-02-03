@@ -1,5 +1,6 @@
 #include "ir/disassembler.hpp"
 
+#include <cstddef>
 #include <iomanip>
 #include <iostream>
 #include <unordered_map>
@@ -34,7 +35,12 @@ static void printLiteral(const std::string_view &texto) {
 
 void disassemble(const IRProgram &program) {
     std::cout << "Bytecode Size: " << program.bytecode.size() << " bytes" << std::endl;
-    std::cout << "String Pool Size: " << program.string_pool.size() << " entries" << std::endl;
+    std::cout << "String Pool Size: " << program.string_pool.size() << " entries ";
+    size_t string_pool_size = 0;
+    for (auto &str : program.string_pool) {
+        string_pool_size += str.size();
+    }
+    std::cout << "(" << string_pool_size << " bytes)" << std::endl;
     std::cout << "Functions:" << std::endl;
     for_each_sorted(
         program.functions, [](const auto &a, const auto &b) { return a.second.entry_addr > b.second.entry_addr; },
@@ -116,6 +122,14 @@ void disassemble(const IRProgram &program) {
                 break;
             }
             case OpCode::ARR_ALLOC: {
+                uint32_t count = *(uint32_t *)&code[ip];
+                ip += 4;
+                uint32_t elem_slots = *(uint32_t *)&code[ip];
+                ip += 4;
+                std::cout << "count " << count << " elem_slots " << elem_slots;
+                break;
+            }
+            case OpCode::STRUCT_ALLOC: {
                 uint32_t slots = *(uint32_t *)&code[ip];
                 ip += 4;
                 std::cout << "slots " << slots;
@@ -125,25 +139,11 @@ void disassemble(const IRProgram &program) {
             case OpCode::LOAD_VAR: {
                 uint16_t slot = *(uint16_t *)&code[ip];
                 ip += 2;
-                uint8_t size = code[ip++];
-                std::cout << "slot " << (int)slot << " size " << (int)size;
+                std::cout << "slot " << (int)slot;
                 break;
             }
             case OpCode::STORE_GLOBAL:
             case OpCode::LOAD_GLOBAL: {
-                uint16_t slot = *(uint16_t *)&code[ip];
-                ip += 2;
-                uint8_t size = code[ip++];
-                std::cout << "global_slot " << (int)slot << " size " << (int)size;
-                break;
-            }
-            case OpCode::LEA_STACK: {
-                uint16_t slot = *(uint16_t *)&code[ip];
-                ip += 2;
-                std::cout << "slot " << (int)slot;
-                break;
-            }
-            case OpCode::LEA_GLOBAL: {
                 uint16_t slot = *(uint16_t *)&code[ip];
                 ip += 2;
                 std::cout << "global_slot " << (int)slot;
@@ -153,8 +153,7 @@ void disassemble(const IRProgram &program) {
             case OpCode::STORE_PTR_OFFSET: {
                 uint32_t offset = *(uint32_t *)&code[ip];
                 ip += 4;
-                uint8_t size = code[ip++];
-                std::cout << "offset " << (int)offset << " size " << (int)size;
+                std::cout << "offset " << (int)offset;
                 break;
             }
             case OpCode::SYSCALL: {
@@ -165,11 +164,6 @@ void disassemble(const IRProgram &program) {
                 } else {
                     std::cout << (int)num_args;
                 }
-                break;
-            }
-            case OpCode::RET: {
-                uint8_t size = code[ip++];
-                std::cout << "size " << (int)size;
                 break;
             }
             case OpCode::CALL:
@@ -188,6 +182,7 @@ void disassemble(const IRProgram &program) {
                 }
                 break;
             }
+            case OpCode::RET:
             case OpCode::YIELD:
             case OpCode::AWAIT:
             case OpCode::PUSH_VARARGS: {

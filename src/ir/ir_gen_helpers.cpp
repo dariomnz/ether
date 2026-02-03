@@ -2,6 +2,7 @@
 #include <stdexcept>
 
 #include "ir/ir_gen.hpp"
+#include "vm/vm.hpp"
 
 namespace ether::ir_gen {
 
@@ -52,12 +53,12 @@ IRGenerator::Symbol IRGenerator::get_var_symbol(const std::string &name) {
     throw std::runtime_error("Undefined variable: " + name);
 }
 
-void IRGenerator::define_var(const std::string &name, uint16_t size) {
+void IRGenerator::define_var(const std::string &name) {
     if (m_scopes.empty()) throw std::runtime_error("Variable defined outside scope");
     auto &scope = m_scopes.back();
     uint16_t slot = scope.next_slot;
-    scope.next_slot += size;
-    scope.variables[name] = {slot, (uint8_t)size, scope.is_global};
+    scope.next_slot += 1;
+    scope.variables[name] = {slot, 1, scope.is_global};
 }
 
 IRGenerator::JumpPlaceholder IRGenerator::emit_jump(ir::OpCode op, uint32_t target) {
@@ -71,22 +72,7 @@ void IRGenerator::patch_jump(JumpPlaceholder jp, uint32_t target) {
     std::memcpy(&m_program.bytecode[jp.pos], &target, 4);
 }
 
-uint32_t IRGenerator::get_type_size(const parser::DataType &type) {
-    uint32_t num_slots = 1;
-    if (type.kind == parser::DataType::Kind::Struct) {
-        num_slots = m_structs.at(type.struct_name).total_size;
-    } else if (type.kind == parser::DataType::Kind::Array) {
-        if (!type.inner) {
-            throw std::runtime_error("Array type must have an element type");
-        }
-        uint32_t element_size = 1;
-        if (type.inner->kind == parser::DataType::Kind::Struct) {
-            element_size = m_structs.at(type.inner->struct_name).total_size;
-        }
-        num_slots = element_size * type.array_size;
-    }
-    return num_slots * 16;
-}
+uint32_t IRGenerator::get_type_size(const parser::DataType &type) { return sizeof(vm::Value); }
 
 void IRGenerator::emit_push_i64(int64_t val) {
     emit_opcode(ir::OpCode::PUSH_I64);
@@ -131,33 +117,35 @@ void IRGenerator::emit_str_get() { emit_opcode(ir::OpCode::STR_GET); }
 
 void IRGenerator::emit_str_set() { emit_opcode(ir::OpCode::STR_SET); }
 
-void IRGenerator::emit_arr_alloc(uint32_t slots) {
+void IRGenerator::emit_arr_alloc(uint32_t count, uint32_t elem_struct_slots) {
     emit_opcode(ir::OpCode::ARR_ALLOC);
+    emit_uint32(count);
+    emit_uint32(elem_struct_slots);
+}
+
+void IRGenerator::emit_struct_alloc(uint32_t slots) {
+    emit_opcode(ir::OpCode::STRUCT_ALLOC);
     emit_uint32(slots);
 }
 
-void IRGenerator::emit_load_var(uint16_t slot, uint8_t size) {
+void IRGenerator::emit_load_var(uint16_t slot) {
     emit_opcode(ir::OpCode::LOAD_VAR);
     emit_uint16(slot);
-    emit_byte(size);
 }
 
-void IRGenerator::emit_store_var(uint16_t slot, uint8_t size) {
+void IRGenerator::emit_store_var(uint16_t slot) {
     emit_opcode(ir::OpCode::STORE_VAR);
     emit_uint16(slot);
-    emit_byte(size);
 }
 
-void IRGenerator::emit_load_global(uint16_t slot, uint8_t size) {
+void IRGenerator::emit_load_global(uint16_t slot) {
     emit_opcode(ir::OpCode::LOAD_GLOBAL);
     emit_uint16(slot);
-    emit_byte(size);
 }
 
-void IRGenerator::emit_store_global(uint16_t slot, uint8_t size) {
+void IRGenerator::emit_store_global(uint16_t slot) {
     emit_opcode(ir::OpCode::STORE_GLOBAL);
     emit_uint16(slot);
-    emit_byte(size);
 }
 
 void IRGenerator::emit_add() { emit_opcode(ir::OpCode::ADD); }
@@ -170,10 +158,7 @@ void IRGenerator::emit_sub_f() { emit_opcode(ir::OpCode::SUB_F); }
 void IRGenerator::emit_mul_f() { emit_opcode(ir::OpCode::MUL_F); }
 void IRGenerator::emit_div_f() { emit_opcode(ir::OpCode::DIV_F); }
 
-void IRGenerator::emit_ret(uint8_t size) {
-    emit_opcode(ir::OpCode::RET);
-    emit_byte(size);
-}
+void IRGenerator::emit_ret() { emit_opcode(ir::OpCode::RET); }
 
 void IRGenerator::emit_halt() { emit_opcode(ir::OpCode::HALT); }
 
@@ -194,26 +179,14 @@ void IRGenerator::emit_spawn(uint32_t addr, uint8_t args) {
     emit_byte(args);
 }
 
-void IRGenerator::emit_lea_stack(uint16_t slot) {
-    emit_opcode(ir::OpCode::LEA_STACK);
-    emit_uint16(slot);
-}
-
-void IRGenerator::emit_lea_global(uint16_t slot) {
-    emit_opcode(ir::OpCode::LEA_GLOBAL);
-    emit_uint16(slot);
-}
-
-void IRGenerator::emit_load_ptr_offset(int32_t offset, uint8_t size) {
+void IRGenerator::emit_load_ptr_offset(int32_t offset) {
     emit_opcode(ir::OpCode::LOAD_PTR_OFFSET);
     emit_int32(offset);
-    emit_byte(size);
 }
 
-void IRGenerator::emit_store_ptr_offset(int32_t offset, uint8_t size) {
+void IRGenerator::emit_store_ptr_offset(int32_t offset) {
     emit_opcode(ir::OpCode::STORE_PTR_OFFSET);
     emit_int32(offset);
-    emit_byte(size);
 }
 
 void IRGenerator::emit_push_varargs() { emit_opcode(ir::OpCode::PUSH_VARARGS); }

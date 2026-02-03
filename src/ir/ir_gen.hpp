@@ -72,6 +72,7 @@ class IRGenerator : public parser::ConstASTVisitor {
     struct StructInfo {
         std::unordered_map<std::string, uint8_t> member_offsets;
         uint16_t total_size;
+        std::vector<std::pair<uint8_t, std::string>> struct_members;  // offset, struct name
     };
     std::unordered_map<std::string, StructInfo> m_structs;
 
@@ -95,11 +96,12 @@ class IRGenerator : public parser::ConstASTVisitor {
     void emit_push_str(uint32_t id);
     void emit_str_get();
     void emit_str_set();
-    void emit_arr_alloc(uint32_t slots);
-    void emit_load_var(uint16_t slot, uint8_t size = 1);
-    void emit_store_var(uint16_t slot, uint8_t size = 1);
-    void emit_load_global(uint16_t slot, uint8_t size = 1);
-    void emit_store_global(uint16_t slot, uint8_t size = 1);
+    void emit_arr_alloc(uint32_t count, uint32_t elem_struct_slots);
+    void emit_struct_alloc(uint32_t slots);
+    void emit_load_var(uint16_t slot);
+    void emit_store_var(uint16_t slot);
+    void emit_load_global(uint16_t slot);
+    void emit_store_global(uint16_t slot);
     void emit_add();
     void emit_sub();
     void emit_mul();
@@ -108,15 +110,13 @@ class IRGenerator : public parser::ConstASTVisitor {
     void emit_sub_f();
     void emit_mul_f();
     void emit_div_f();
-    void emit_ret(uint8_t size = 1);
+    void emit_ret();
     void emit_halt();
     void emit_syscall(uint8_t args);
     void emit_call(uint32_t addr, uint8_t args);
     void emit_spawn(uint32_t addr, uint8_t args);
-    void emit_lea_stack(uint16_t slot);
-    void emit_lea_global(uint16_t slot);
-    void emit_load_ptr_offset(int32_t offset, uint8_t size = 1);
-    void emit_store_ptr_offset(int32_t offset, uint8_t size = 1);
+    void emit_load_ptr_offset(int32_t offset);
+    void emit_store_ptr_offset(int32_t offset);
     void emit_push_varargs();
     void emit_pop();
     void emit_yield();
@@ -136,7 +136,7 @@ class IRGenerator : public parser::ConstASTVisitor {
     Symbol get_var_symbol(const std::string &name);
     uint32_t get_type_size(const parser::DataType &type);
     void visit(const parser::SizeofExpression &node) override;
-    void define_var(const std::string &name, uint16_t size = 1);
+    void define_var(const std::string &name);
 
     struct JumpPlaceholder {
         size_t pos;
